@@ -125,3 +125,10 @@ npm run dev
 1. Create a Vercel Postgres database in the Vercel dashboard.
 2. Add the `POSTGRES_URL` value to `.env.local` (see `.env.example`).
 3. Verify connectivity at `http://localhost:3000/api/health/db`.
+
+## Admin setup
+
+1. Copy `.env.example` to `.env.local`.
+2. Set `SESSION_PASSWORD` (32+ chars), `ADMIN_EMAIL`, and `ADMIN_PASSWORD`.
+3. Create a Resend account and add `RESEND_API_KEY`.
+4. Visit `http://localhost:3000/admin` to log in and configure the recipient email.

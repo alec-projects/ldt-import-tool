@@ -1,156 +1,310 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type Template = {
+  id: number;
+  name: string;
+  event_name: string;
+  race_name: string;
+  ticket_name: string;
+  columns: string[];
+  required_columns: string[];
+};
+
+type FieldValues = Record<string, string>;
+
+type TemplateOption = {
+  id: number;
+  name: string;
+  event: string;
+  race: string;
+  ticket: string;
+  columns: string[];
+  requiredColumns: string[];
+};
+
+function normalizeKey(value: string) {
+  return value.replace(/^#+/, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isRosterField(column: string) {
+  const normalized = normalizeKey(column);
+  return normalized === "firstname" || normalized === "lastname" || normalized === "email";
+}
+
 export default function Home() {
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState("");
+  const [selectedRace, setSelectedRace] = useState("");
+  const [selectedTicket, setSelectedTicket] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [fieldValues, setFieldValues] = useState<FieldValues>({});
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    async function loadTemplates() {
+      const response = await fetch("/api/templates");
+      const data = (await response.json()) as { templates: Template[] };
+      const mapped = data.templates.map((template) => ({
+        id: template.id,
+        name: template.name,
+        event: template.event_name,
+        race: template.race_name,
+        ticket: template.ticket_name,
+        columns: template.columns,
+        requiredColumns: template.required_columns,
+      }));
+      setTemplates(mapped);
+    }
+
+    loadTemplates().catch(() => {
+      setError("Unable to load templates. Please try again later.");
+    });
+  }, []);
+
+  const events = useMemo(() => {
+    return Array.from(new Set(templates.map((template) => template.event)));
+  }, [templates]);
+
+  const races = useMemo(() => {
+    return Array.from(
+      new Set(
+        templates
+          .filter((template) => template.event === selectedEvent)
+          .map((template) => template.race),
+      ),
+    );
+  }, [templates, selectedEvent]);
+
+  const tickets = useMemo(() => {
+    return Array.from(
+      new Set(
+        templates
+          .filter(
+            (template) =>
+              template.event === selectedEvent && template.race === selectedRace,
+          )
+          .map((template) => template.ticket),
+      ),
+    );
+  }, [templates, selectedEvent, selectedRace]);
+
+  const selectedTemplate = useMemo(() => {
+    return templates.find(
+      (template) =>
+        template.event === selectedEvent &&
+        template.race === selectedRace &&
+        template.ticket === selectedTicket,
+    );
+  }, [templates, selectedEvent, selectedRace, selectedTicket]);
+
+  const extraFields = useMemo(() => {
+    if (!selectedTemplate) return [];
+    return selectedTemplate.columns.filter((column) => !isRosterField(column));
+  }, [selectedTemplate]);
+
+  const requiredFields = useMemo(() => {
+    return new Set(selectedTemplate?.requiredColumns ?? []);
+  }, [selectedTemplate]);
+
+  function handleFieldChange(column: string, value: string) {
+    setFieldValues((prev) => ({ ...prev, [column]: value }));
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setStatus(null);
+
+    if (!file) {
+      setError("Please upload a CSV roster file.");
+      return;
+    }
+
+    if (!selectedTemplate) {
+      setError("Please select event, race, and ticket.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("templateId", String(selectedTemplate.id));
+      formData.append("file", file);
+      formData.append("fields", JSON.stringify(fieldValues));
+
+      const response = await fetch("/api/import", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Import failed.");
+      }
+
+      setStatus("Import sent. Your CSV has been emailed to the configured recipient.");
+      setFieldValues({});
+      setFile(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f9eddc_0%,#f7f3ee_48%,#efe6da_100%)]">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-16 px-6 py-16 md:py-20">
-        <section className="grid gap-10 md:grid-cols-[1.1fr_0.9fr] md:items-center">
-          <div className="space-y-6">
-            <span className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
-              Participant Import Builder
-            </span>
-            <h1 className="text-4xl font-semibold leading-tight text-[color:var(--foreground)] md:text-5xl">
-              Build a clean import file from a simple roster.
-            </h1>
-            <p className="text-base leading-relaxed text-[color:var(--ink-muted)] md:text-lg">
-              Upload a CSV with First Name, Last Name, and Email. Choose the
-              event, race, and ticket, fill the remaining fields once, and
-              export a validated CSV ready for upload.
-            </p>
-            <div className="flex flex-wrap items-center gap-4">
-              <button className="rounded-full bg-[color:var(--forest)] px-5 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:translate-y-[-1px] hover:bg-[#14523d]">
-                Start Import
-              </button>
-              <button className="rounded-full border border-black/20 px-5 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--foreground)] transition hover:border-black/40">
-                View Sample CSV
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-6 text-sm text-[color:var(--ink-muted)]">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[color:var(--forest)]" />
-                <span>Upload once</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[color:var(--clay)]" />
-                <span>Fill remaining fields</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-black/60" />
-                <span>Export instantly</span>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.35)]">
-            <div className="space-y-4 rounded-2xl border border-black/10 bg-[color:var(--sand)] p-6">
-              <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
-                <span>Roster Preview</span>
-                <span>96 rows</span>
-              </div>
-              <div className="grid grid-cols-3 gap-4 text-sm font-medium text-[color:var(--foreground)]">
-                <span>First Name</span>
-                <span>Last Name</span>
-                <span>Email</span>
-              </div>
-              <div className="space-y-2 text-sm text-[color:var(--ink-muted)]">
-                <div className="grid grid-cols-3 gap-4">
-                  <span>Jordan</span>
-                  <span>Lee</span>
-                  <span>jordan@example.com</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <span>Cam</span>
-                  <span>Diaz</span>
-                  <span>cam@example.com</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <span>Riley</span>
-                  <span>Chen</span>
-                  <span>riley@example.com</span>
-                </div>
-              </div>
-              <div className="mt-6 rounded-2xl border border-black/10 bg-white/80 p-4 text-xs uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
-                Event / Race / Ticket selected
-              </div>
-            </div>
-          </div>
-        </section>
+      <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-16">
+        <header className="space-y-3">
+          <span className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+            Participant Import Builder
+          </span>
+          <h1 className="text-3xl font-semibold text-[color:var(--foreground)]">
+            Import a participant roster
+          </h1>
+          <p className="text-sm text-[color:var(--ink-muted)]">
+            Upload a CSV with First Name, Last Name, and Email. Select the event,
+            race, and ticket, then fill the remaining fields once to generate a
+            validated CSV. Nothing is saved after submission.
+          </p>
+        </header>
 
-        <section className="grid gap-6 md:grid-cols-3">
-          {[
-            {
-              title: "Upload Roster",
-              detail:
-                "Drop in a CSV with First Name, Last Name, Email. We auto-map headers.",
-            },
-            {
-              title: "Complete Fields",
-              detail:
-                "Select the event, race, and ticket. Fill the remaining fields once.",
-            },
-            {
-              title: "Download",
-              detail:
-                "Export a ready-to-import CSV. Nothing is saved after submission.",
-            },
-          ].map((step, index) => (
-            <div
-              key={step.title}
-              className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-[0_20px_40px_-28px_rgba(0,0,0,0.35)]"
-            >
-              <div className="text-xs uppercase tracking-[0.3em] text-[color:var(--clay)]">
-                Step {index + 1}
-              </div>
-              <h2 className="mt-3 text-xl font-semibold text-[color:var(--foreground)]">
-                {step.title}
-              </h2>
-              <p className="mt-2 text-sm leading-relaxed text-[color:var(--ink-muted)]">
-                {step.detail}
+        <form
+          className="flex flex-col gap-6 rounded-3xl border border-black/10 bg-white/70 p-6 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.35)]"
+          onSubmit={handleSubmit}
+        >
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+              Upload roster CSV
+            </label>
+            <div className="rounded-2xl border border-dashed border-black/20 bg-white/60 p-6">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                className="block w-full text-sm text-[color:var(--foreground)]"
+              />
+              <p className="mt-2 text-xs text-[color:var(--ink-muted)]">
+                Required columns: First Name, Last Name, Email
               </p>
             </div>
-          ))}
-        </section>
+          </div>
 
-        <section className="grid gap-8 md:grid-cols-[0.9fr_1.1fr]">
-          <div className="space-y-6">
-            <h2 className="text-3xl font-semibold text-[color:var(--foreground)]">
-              Fast, client-friendly, and permissionless.
-            </h2>
-            <p className="text-sm leading-relaxed text-[color:var(--ink-muted)]">
-              Clients only see the tools they need: upload a roster, pick the
-              event/race/ticket, complete the required fields, and export. All
-              template management lives behind a gated settings page.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              {[
-                "Simple CSV input",
-                "Auto header mapping",
-                "Validation before export",
-                "No data stored",
-              ].map((item) => (
-                <span
-                  key={item}
-                  className="rounded-full border border-black/10 bg-white/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-[color:var(--ink-muted)]"
-                >
-                  {item}
-                </span>
-              ))}
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                Select event
+              </label>
+              <select
+                value={selectedEvent}
+                onChange={(event) => {
+                  setSelectedEvent(event.target.value);
+                  setSelectedRace("");
+                  setSelectedTicket("");
+                }}
+                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Choose event</option>
+                {events.map((event) => (
+                  <option key={event} value={event}>
+                    {event}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                Select race
+              </label>
+              <select
+                value={selectedRace}
+                onChange={(event) => {
+                  setSelectedRace(event.target.value);
+                  setSelectedTicket("");
+                }}
+                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                disabled={!selectedEvent}
+              >
+                <option value="">Choose race</option>
+                {races.map((race) => (
+                  <option key={race} value={race}>
+                    {race}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                Select ticket
+              </label>
+              <select
+                value={selectedTicket}
+                onChange={(event) => setSelectedTicket(event.target.value)}
+                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                disabled={!selectedRace}
+              >
+                <option value="">Choose ticket</option>
+                {tickets.map((ticket) => (
+                  <option key={ticket} value={ticket}>
+                    {ticket}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
-          <div className="rounded-3xl border border-black/10 bg-[color:var(--forest)] p-6 text-white">
-            <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
-              <div className="text-xs uppercase tracking-[0.3em] text-white/70">
-                Output Preview
+
+          {selectedTemplate && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-black/10 bg-[color:var(--sand)] px-4 py-3 text-sm text-[color:var(--ink-muted)]">
+                Template selected: <span className="font-medium">{selectedTemplate.name}</span>
               </div>
-              <pre className="mt-4 whitespace-pre-wrap text-xs leading-relaxed text-white/80">
-{`first_name,last_name,email,ticket_id,country
-Jordan,Lee,jordan@example.com,123,US
-Cam,Diaz,cam@example.com,123,US
-Riley,Chen,riley@example.com,123,US`}
-              </pre>
+              <div className="grid gap-4 md:grid-cols-2">
+                {extraFields.map((column) => (
+                  <div key={column} className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                      {column.replace(/^#+/, "")}
+                      {requiredFields.has(column) ? " *" : ""}
+                    </label>
+                    <input
+                      type="text"
+                      value={fieldValues[column] ?? ""}
+                      onChange={(event) => handleFieldChange(column, event.target.value)}
+                      className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                      required={requiredFields.has(column)}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="mt-6 rounded-2xl border border-white/20 bg-white/10 p-5 text-xs uppercase tracking-[0.2em] text-white/70">
-              Generated instantly on submission
+          )}
+
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
             </div>
-          </div>
-        </section>
+          )}
+
+          {status && (
+            <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+              {status}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            className="flex items-center justify-center rounded-full bg-[color:var(--forest)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:translate-y-[-1px] hover:bg-[#14523d] disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={submitting}
+          >
+            {submitting ? "Processing..." : "Generate & Email CSV"}
+          </button>
+        </form>
       </main>
     </div>
   );
