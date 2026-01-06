@@ -35,7 +35,6 @@ export async function POST(request: Request) {
   const templateId = Number(formData.get("templateId"));
   const file = formData.get("file");
   const fieldsRaw = String(formData.get("fields") ?? "{}");
-  const clientEmail = String(formData.get("clientEmail") ?? "").trim();
 
   if (!templateId || Number.isNaN(templateId)) {
     return Response.json({ error: "Template is required." }, { status: 400 });
@@ -45,9 +44,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "CSV file is required." }, { status: 400 });
   }
 
-  if (!clientEmail) {
-    return Response.json({ error: "Client email is required." }, { status: 400 });
-  }
 
   let fieldValues: FieldValues = {};
   try {
@@ -164,9 +160,7 @@ export async function POST(request: Request) {
 
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     const outputFileName = `import-${timestamp}.csv`;
-    const recipients = Array.from(
-      new Set([recipientEmail, clientEmail].filter(Boolean)),
-    );
+    const recipients = [recipientEmail];
     await sendImportEmail({
       to: recipients,
       subject: `Participant Import (${template.event_name} / ${template.race_name} / ${template.ticket_name})`,
@@ -184,7 +178,6 @@ export async function POST(request: Request) {
       ticketName: template.ticket_name,
       status: "success",
       recipientEmail,
-      clientEmail,
     });
 
     return Response.json({
@@ -203,7 +196,6 @@ export async function POST(request: Request) {
       ticketName: template.ticket_name,
       status,
       recipientEmail: await getSetting("import_recipient_email"),
-      clientEmail,
       errorMessage,
     });
     return Response.json({ error: errorMessage }, { status: 500 });

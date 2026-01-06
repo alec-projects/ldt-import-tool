@@ -131,5 +131,4 @@ npm run dev
 1. Copy `.env.example` to `.env.local`.
 2. Set `SESSION_PASSWORD` (32+ chars), `ADMIN_EMAIL`, and `ADMIN_PASSWORD`.
 3. Create a Resend account and add `RESEND_API_KEY`.
-4. Set `APP_URL` to your deployed URL (used for admin invites).
 4. Visit `http://localhost:3000/admin` to log in and configure the recipient email.

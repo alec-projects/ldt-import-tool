@@ -39,7 +39,6 @@ export default function Home() {
   const [selectedRace, setSelectedRace] = useState("");
   const [selectedTicket, setSelectedTicket] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [clientEmail, setClientEmail] = useState("");
   const [fileStatus, setFileStatus] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<FieldValues>({});
   const [status, setStatus] = useState<string | null>(null);
@@ -140,11 +139,6 @@ export default function Home() {
     setError(null);
     setStatus(null);
 
-    if (!clientEmail) {
-      setError("Please add your email address.");
-      return;
-    }
-
     if (!file) {
       setError("Please upload a CSV roster file.");
       return;
@@ -162,7 +156,6 @@ export default function Home() {
       formData.append("templateId", String(selectedTemplate.id));
       formData.append("file", file);
       formData.append("fields", JSON.stringify(fieldValues));
-      formData.append("clientEmail", clientEmail);
 
       const response = await fetch("/api/import", {
         method: "POST",
@@ -206,22 +199,6 @@ export default function Home() {
           className="flex flex-col gap-6 rounded-3xl border border-black/10 bg-white/70 p-6 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.35)]"
           onSubmit={handleSubmit}
         >
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
-              Your email
-            </label>
-            <input
-              type="email"
-              required
-              value={clientEmail}
-              onChange={(event) => setClientEmail(event.target.value)}
-              className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
-              placeholder="you@example.com"
-            />
-            <p className="text-xs text-[color:var(--ink-muted)]">
-              You will receive a copy of the generated CSV.
-            </p>
-          </div>
           <div className="space-y-2">
             <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
               Upload roster CSV
