@@ -3,6 +3,22 @@ import { sendAdminInviteEmail } from "@/lib/email";
 import { getAdminSession } from "@/lib/session";
 import crypto from "crypto";
 
+function getBaseUrl(request: Request) {
+  const envUrl = process.env.APP_URL;
+  if (envUrl) {
+    return envUrl;
+  }
+  const origin = request.headers.get("origin");
+  if (origin) {
+    return origin;
+  }
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  if (host) {
+    return `https://${host}`;
+  }
+  return "";
+}
+
 export async function POST(request: Request) {
   const session = await getAdminSession();
   if (!session.adminEmail) {
@@ -26,14 +42,21 @@ export async function POST(request: Request) {
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const invite = await createAdminInvite({ email, token, expiresAt });
 
-  const origin = request.headers.get("origin") ?? "";
-  const baseUrl = process.env.APP_URL || origin;
+  const baseUrl = getBaseUrl(request);
   if (!baseUrl) {
-    return Response.json({ error: "APP_URL is not configured." }, { status: 500 });
+    return Response.json(
+      { error: "APP_URL is not configured." },
+      { status: 500 },
+    );
   }
   const inviteUrl = `${baseUrl}/admin/accept?token=${invite.token}`;
 
-  await sendAdminInviteEmail({ to: email, inviteUrl });
+  try {
+    await sendAdminInviteEmail({ to: email, inviteUrl });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to send invite.";
+    return Response.json({ error: message }, { status: 500 });
+  }
 
   return Response.json({ ok: true });
 }

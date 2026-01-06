@@ -200,13 +200,6 @@ export default function Home() {
             race, and ticket, then fill the remaining fields once to generate a
             validated CSV. Nothing is saved after submission.
           </p>
-          <p className="text-xs text-[color:var(--ink-muted)]">
-            Admin? Manage templates and settings at{" "}
-            <a className="font-semibold text-[color:var(--foreground)] underline" href="/admin">
-              /admin
-            </a>
-            .
-          </p>
         </header>
 
         <form
