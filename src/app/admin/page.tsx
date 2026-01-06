@@ -18,6 +18,8 @@ export default function AdminPage() {
   const [recipientEmail, setRecipientEmail] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [admins, setAdmins] = useState<{ id: number; email: string }[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
   const [templateUploadStatus, setTemplateUploadStatus] = useState<string | null>(null);
   const [templateFileName, setTemplateFileName] = useState<string | null>(null);
   const [templateEvent, setTemplateEvent] = useState("");
@@ -39,9 +41,10 @@ export default function AdminPage() {
   }, []);
 
   async function fetchSettingsAndTemplates() {
-    const [settingsRes, templatesRes] = await Promise.all([
+    const [settingsRes, templatesRes, adminsRes] = await Promise.all([
       fetch("/api/admin/settings"),
       fetch("/api/admin/templates"),
+      fetch("/api/admin/users"),
     ]);
 
     if (settingsRes.ok) {
@@ -52,6 +55,11 @@ export default function AdminPage() {
     if (templatesRes.ok) {
       const data = await templatesRes.json();
       setTemplates(data.templates ?? []);
+    }
+
+    if (adminsRes.ok) {
+      const data = await adminsRes.json();
+      setAdmins(data.admins ?? []);
     }
   }
 
@@ -164,6 +172,33 @@ export default function AdminPage() {
     });
   }
 
+  async function handleInvite(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus(null);
+    setError(null);
+
+    if (!inviteEmail) {
+      setError("Invite email is required.");
+      return;
+    }
+
+    const response = await fetch("/api/admin/invites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: inviteEmail }),
+    });
+
+    const raw = await response.text();
+    const data = raw ? (JSON.parse(raw) as { error?: string }) : {};
+    if (!response.ok) {
+      setError(data.error || "Failed to send invite.");
+      return;
+    }
+
+    setStatus("Invite sent.");
+    setInviteEmail("");
+  }
+
   if (checking) {
     return (
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f9eddc_0%,#f7f3ee_48%,#efe6da_100%)] p-6">
@@ -268,6 +303,67 @@ export default function AdminPage() {
               Save settings
             </button>
           </form>
+        </section>
+
+        <section className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.35)]">
+          <h2 className="text-xl font-semibold text-[color:var(--foreground)]">
+            Admin access
+          </h2>
+          <form onSubmit={handleInvite} className="mt-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                Invite admin by email
+              </label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                placeholder="admin@example.com"
+              />
+            </div>
+            <button
+              type="submit"
+              className="rounded-full bg-[color:var(--forest)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:translate-y-[-1px] hover:bg-[#14523d]"
+            >
+              Send invite
+            </button>
+          </form>
+          <div className="mt-6 space-y-2 text-sm text-[color:var(--ink-muted)]">
+            {admins.length === 0 && <p>No admins added yet.</p>}
+            {admins.map((admin) => (
+              <div
+                key={admin.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-black/10 bg-white/60 px-4 py-3"
+              >
+                <div className="font-medium text-[color:var(--foreground)]">
+                  {admin.email}
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!confirm("Remove this admin?")) return;
+                    const response = await fetch(`/api/admin/users/${admin.id}`, {
+                      method: "DELETE",
+                    });
+                    if (!response.ok) {
+                      setError("Failed to remove admin.");
+                      return;
+                    }
+                    fetchSettingsAndTemplates().catch(() => {
+                      setError("Failed to refresh admins.");
+                    });
+                  }}
+                  className="rounded-full border border-black/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-xs text-[color:var(--ink-muted)]">
+            Invites expire after 24 hours.
+          </p>
         </section>
 
         <section className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.35)]">

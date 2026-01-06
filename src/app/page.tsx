@@ -394,6 +394,13 @@ export default function Home() {
             {submitting ? "Processing..." : "Generate & Email CSV"}
           </button>
         </form>
+        <p className="text-xs text-[color:var(--ink-muted)]">
+          Admin? Manage templates and settings at{" "}
+          <a className="font-semibold text-[color:var(--foreground)] underline" href="/admin">
+            admin
+          </a>
+          .
+        </p>
       </main>
     </div>
   );

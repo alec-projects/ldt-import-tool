@@ -47,6 +47,24 @@ export async function ensureSchema() {
     ALTER TABLE import_logs
     ADD COLUMN IF NOT EXISTS client_email TEXT
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS admin_users (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS admin_invites (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
 }
 
 export type TemplateRecord = {
@@ -57,6 +75,20 @@ export type TemplateRecord = {
   ticket_name: string;
   columns: string[];
   required_columns: string[];
+};
+
+export type AdminUserRecord = {
+  id: number;
+  email: string;
+  password_hash: string;
+};
+
+export type AdminInviteRecord = {
+  id: number;
+  email: string;
+  token: string;
+  expires_at: Date;
+  used_at: Date | null;
 };
 
 export type ImportLogCreate = {
@@ -107,6 +139,71 @@ export async function createTemplate(input: {
 export async function deleteTemplate(id: number) {
   await sql`
     DELETE FROM templates WHERE id = ${id}
+  `;
+}
+
+export async function listAdminUsers() {
+  const result = await sql<AdminUserRecord>`
+    SELECT id, email, password_hash
+    FROM admin_users
+    ORDER BY created_at DESC
+  `;
+  return result.rows;
+}
+
+export async function getAdminByEmail(email: string) {
+  const result = await sql<AdminUserRecord>`
+    SELECT id, email, password_hash
+    FROM admin_users
+    WHERE email = ${email}
+    LIMIT 1
+  `;
+  return result.rows[0] ?? null;
+}
+
+export async function createAdminUser(email: string, passwordHash: string) {
+  const result = await sql<AdminUserRecord>`
+    INSERT INTO admin_users (email, password_hash)
+    VALUES (${email}, ${passwordHash})
+    RETURNING id, email, password_hash
+  `;
+  return result.rows[0];
+}
+
+export async function deleteAdminUser(id: number) {
+  await sql`
+    DELETE FROM admin_users WHERE id = ${id}
+  `;
+}
+
+export async function createAdminInvite(input: {
+  email: string;
+  token: string;
+  expiresAt: Date;
+}) {
+  const result = await sql<AdminInviteRecord>`
+    INSERT INTO admin_invites (email, token, expires_at)
+    VALUES (${input.email}, ${input.token}, ${input.expiresAt.toISOString()})
+    RETURNING id, email, token, expires_at, used_at
+  `;
+  return result.rows[0];
+}
+
+export async function getInviteByToken(token: string) {
+  const result = await sql<AdminInviteRecord>`
+    SELECT id, email, token, expires_at, used_at
+    FROM admin_invites
+    WHERE token = ${token}
+    LIMIT 1
+  `;
+  return result.rows[0] ?? null;
+}
+
+export async function markInviteUsed(id: number) {
+  await sql`
+    UPDATE admin_invites
+    SET used_at = NOW()
+    WHERE id = ${id}
   `;
 }
 

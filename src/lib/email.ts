@@ -31,3 +31,17 @@ export async function sendImportEmail(params: {
     ],
   });
 }
+
+export async function sendAdminInviteEmail(params: {
+  to: string;
+  inviteUrl: string;
+}) {
+  const resend = getResendClient();
+
+  return resend.emails.send({
+    from: "Participant Import <onboarding@resend.dev>",
+    to: params.to,
+    subject: "You have been invited as an admin",
+    text: `You have been invited to manage Participant Import Builder. Set your password here: ${params.inviteUrl}`,
+  });
+}
