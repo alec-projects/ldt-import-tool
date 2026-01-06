@@ -71,7 +71,8 @@ export default function AdminPage() {
       }),
     });
 
-    const data = await response.json();
+    const raw = await response.text();
+    const data = raw ? (JSON.parse(raw) as { error?: string }) : {};
     if (!response.ok) {
       setLoginError(data.error || "Login failed.");
       return;
