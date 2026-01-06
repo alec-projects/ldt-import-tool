@@ -8,33 +8,33 @@ export default function Home() {
               Participant Import Builder
             </span>
             <h1 className="text-4xl font-semibold leading-tight text-[color:var(--foreground)] md:text-5xl">
-              Turn messy rosters into import-ready files in minutes.
+              Build a clean import file from a simple roster.
             </h1>
             <p className="text-base leading-relaxed text-[color:var(--ink-muted)] md:text-lg">
-              Upload a simple roster, pick the right event template, and export a
-              validated CSV that matches the exact column order your system
-              requires.
+              Upload a CSV with First Name, Last Name, and Email. Choose the
+              event, race, and ticket, fill the remaining fields once, and
+              export a validated CSV ready for upload.
             </p>
             <div className="flex flex-wrap items-center gap-4">
               <button className="rounded-full bg-[color:var(--forest)] px-5 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:translate-y-[-1px] hover:bg-[#14523d]">
-                Start Build
+                Start Import
               </button>
               <button className="rounded-full border border-black/20 px-5 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--foreground)] transition hover:border-black/40">
-                View Templates
+                View Sample CSV
               </button>
             </div>
             <div className="flex flex-wrap gap-6 text-sm text-[color:var(--ink-muted)]">
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-[color:var(--forest)]" />
-                <span>CSV in, CSV out</span>
+                <span>Upload once</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-[color:var(--clay)]" />
-                <span>Template-driven validation</span>
+                <span>Fill remaining fields</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-black/60" />
-                <span>Admin-controlled rules</span>
+                <span>Export instantly</span>
               </div>
             </div>
           </div>
@@ -67,7 +67,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="mt-6 rounded-2xl border border-black/10 bg-white/80 p-4 text-xs uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
-                Template: Ottawa 2026 / Weekend 5K
+                Event / Race / Ticket selected
               </div>
             </div>
           </div>
@@ -78,17 +78,17 @@ export default function Home() {
             {
               title: "Upload Roster",
               detail:
-                "Drag in a CSV with names and emails. Auto-map headers or adjust manually.",
+                "Drop in a CSV with First Name, Last Name, Email. We auto-map headers.",
             },
             {
-              title: "Apply Template",
+              title: "Complete Fields",
               detail:
-                "Pick the event/race/ticket template. Required fields highlight instantly.",
+                "Select the event, race, and ticket. Fill the remaining fields once.",
             },
             {
-              title: "Export",
+              title: "Download",
               detail:
-                "Validate required fields, duplicate defaults, and download the final CSV.",
+                "Export a ready-to-import CSV. Nothing is saved after submission.",
             },
           ].map((step, index) => (
             <div
@@ -111,19 +111,19 @@ export default function Home() {
         <section className="grid gap-8 md:grid-cols-[0.9fr_1.1fr]">
           <div className="space-y-6">
             <h2 className="text-3xl font-semibold text-[color:var(--foreground)]">
-              Admin-controlled templates with versioning.
+              Fast, client-friendly, and permissionless.
             </h2>
             <p className="text-sm leading-relaxed text-[color:var(--ink-muted)]">
-              Templates define required columns, input types, and allowed values.
-              Admins can publish, archive, and version templates without touching
-              user rosters.
+              Clients only see the tools they need: upload a roster, pick the
+              event/race/ticket, complete the required fields, and export. All
+              template management lives behind a gated settings page.
             </p>
             <div className="flex flex-wrap gap-3">
               {[
-                "Mapped upload fields",
-                "Select menus + validations",
-                "Per-template defaults",
-                "Column order guarantee",
+                "Simple CSV input",
+                "Auto header mapping",
+                "Validation before export",
+                "No data stored",
               ].map((item) => (
                 <span
                   key={item}
@@ -137,22 +137,17 @@ export default function Home() {
           <div className="rounded-3xl border border-black/10 bg-[color:var(--forest)] p-6 text-white">
             <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
               <div className="text-xs uppercase tracking-[0.3em] text-white/70">
-                Template JSON
+                Output Preview
               </div>
               <pre className="mt-4 whitespace-pre-wrap text-xs leading-relaxed text-white/80">
-{`{
-  "name": "Run Ottawa 2026 / Weekend 5K / Adult",
-  "version": "1.0.0",
-  "fields": [
-    { "key": "first_name", "required": true, "source": "upload" },
-    { "key": "ticket_id", "required": true, "source": "user" }
-  ],
-  "output": { "format": "csv", "columnOrder": ["first_name", "ticket_id"] }
-}`}
+{`first_name,last_name,email,ticket_id,country
+Jordan,Lee,jordan@example.com,123,US
+Cam,Diaz,cam@example.com,123,US
+Riley,Chen,riley@example.com,123,US`}
               </pre>
             </div>
             <div className="mt-6 rounded-2xl border border-white/20 bg-white/10 p-5 text-xs uppercase tracking-[0.2em] text-white/70">
-              Admin portal access required
+              Generated instantly on submission
             </div>
           </div>
         </section>
