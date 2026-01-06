@@ -67,7 +67,7 @@ export type ImportLogCreate = {
 };
 
 export async function listTemplates() {
-  const result = await sql<TemplateRecord[]>`
+  const result = await sql<TemplateRecord>`
     SELECT id, name, event_name, race_name, ticket_name, columns, required_columns
     FROM templates
     ORDER BY created_at DESC
@@ -83,7 +83,7 @@ export async function createTemplate(input: {
   columns: string[];
   requiredColumns: string[];
 }) {
-  const result = await sql<TemplateRecord[]>`
+  const result = await sql<TemplateRecord>`
     INSERT INTO templates (name, event_name, race_name, ticket_name, columns, required_columns)
     VALUES (
       ${input.name},
@@ -99,7 +99,7 @@ export async function createTemplate(input: {
 }
 
 export async function getSetting(key: string) {
-  const result = await sql<{ value: string }[]>`
+  const result = await sql<{ value: string }>`
     SELECT value FROM settings WHERE key = ${key}
   `;
   return result.rows[0]?.value ?? null;
