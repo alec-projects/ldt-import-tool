@@ -124,7 +124,10 @@ export default function AdminPage() {
     }
 
     setStatus("Template uploaded.");
-    (event.currentTarget as HTMLFormElement).reset();
+    const form = event.currentTarget;
+    if (form instanceof HTMLFormElement) {
+      form.reset();
+    }
     fetchSettingsAndTemplates().catch(() => {
       setError("Failed to refresh templates.");
     });
