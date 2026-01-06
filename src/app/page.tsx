@@ -39,6 +39,8 @@ export default function Home() {
   const [selectedRace, setSelectedRace] = useState("");
   const [selectedTicket, setSelectedTicket] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [clientEmail, setClientEmail] = useState("");
+  const [fileStatus, setFileStatus] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<FieldValues>({});
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +112,25 @@ export default function Home() {
     return new Set(selectedTemplate?.requiredColumns ?? []);
   }, [selectedTemplate]);
 
+  function inputTypeForColumn(column: string) {
+    const normalized = normalizeKey(column);
+    if (normalized.includes("bookedat")) {
+      return "date";
+    }
+    return "text";
+  }
+
+  function selectOptionsForColumn(column: string) {
+    const normalized = normalizeKey(column);
+    if (normalized.includes("gender")) {
+      return ["Male", "Female", "Prefer not to say"];
+    }
+    if (normalized.includes("ldtemailconsentoptout")) {
+      return ["OptOut"];
+    }
+    return null;
+  }
+
   function handleFieldChange(column: string, value: string) {
     setFieldValues((prev) => ({ ...prev, [column]: value }));
   }
@@ -118,6 +139,11 @@ export default function Home() {
     event.preventDefault();
     setError(null);
     setStatus(null);
+
+    if (!clientEmail) {
+      setError("Please add your email address.");
+      return;
+    }
 
     if (!file) {
       setError("Please upload a CSV roster file.");
@@ -136,6 +162,7 @@ export default function Home() {
       formData.append("templateId", String(selectedTemplate.id));
       formData.append("file", file);
       formData.append("fields", JSON.stringify(fieldValues));
+      formData.append("clientEmail", clientEmail);
 
       const response = await fetch("/api/import", {
         method: "POST",
@@ -150,6 +177,7 @@ export default function Home() {
       setStatus("Import sent. Your CSV has been emailed to the configured recipient.");
       setFieldValues({});
       setFile(null);
+      setFileStatus(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed.");
     } finally {
@@ -180,18 +208,51 @@ export default function Home() {
         >
           <div className="space-y-2">
             <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+              Your email
+            </label>
+            <input
+              type="email"
+              required
+              value={clientEmail}
+              onChange={(event) => setClientEmail(event.target.value)}
+              className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+              placeholder="you@example.com"
+            />
+            <p className="text-xs text-[color:var(--ink-muted)]">
+              You will receive a copy of the generated CSV.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
               Upload roster CSV
             </label>
             <div className="rounded-2xl border border-dashed border-black/20 bg-white/60 p-6">
-              <input
-                type="file"
-                accept=".csv"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                className="block w-full text-sm text-[color:var(--foreground)]"
-              />
+              <label className="inline-flex cursor-pointer items-center gap-3 rounded-full border border-black/20 bg-white px-4 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--foreground)]">
+                Choose CSV file
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(event) => {
+                    const nextFile = event.target.files?.[0] ?? null;
+                    setFile(nextFile);
+                    setFileStatus(nextFile ? "Upload successful" : null);
+                  }}
+                  className="hidden"
+                />
+              </label>
               <p className="mt-2 text-xs text-[color:var(--ink-muted)]">
-                Required columns: First Name, Last Name, Email
+                Required columns: First Name, Last Name, Email Address
               </p>
+              {file && (
+                <p className="mt-2 text-sm text-[color:var(--foreground)]">
+                  {file.name}
+                </p>
+              )}
+              {fileStatus && (
+                <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--forest)]">
+                  {fileStatus}
+                </p>
+              )}
             </div>
           </div>
 
@@ -265,6 +326,9 @@ export default function Home() {
               <div className="rounded-2xl border border-black/10 bg-[color:var(--sand)] px-4 py-3 text-sm text-[color:var(--ink-muted)]">
                 Template selected: <span className="font-medium">{selectedTemplate.name}</span>
               </div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                Only fields marked with * are required.
+              </p>
               <div className="grid gap-4 md:grid-cols-2">
                 {extraFields.map((column) => (
                   <div key={column} className="space-y-2">
@@ -272,13 +336,31 @@ export default function Home() {
                       {column.replace(/^#+/, "")}
                       {requiredFields.has(column) ? " *" : ""}
                     </label>
-                    <input
-                      type="text"
-                      value={fieldValues[column] ?? ""}
-                      onChange={(event) => handleFieldChange(column, event.target.value)}
-                      className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
-                      required={requiredFields.has(column)}
-                    />
+                    {selectOptionsForColumn(column) ? (
+                      <select
+                        value={fieldValues[column] ?? ""}
+                        onChange={(event) =>
+                          handleFieldChange(column, event.target.value)
+                        }
+                        className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                        required={requiredFields.has(column)}
+                      >
+                        <option value="">Select</option>
+                        {selectOptionsForColumn(column)?.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={inputTypeForColumn(column)}
+                        value={fieldValues[column] ?? ""}
+                        onChange={(event) => handleFieldChange(column, event.target.value)}
+                        className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                        required={requiredFields.has(column)}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

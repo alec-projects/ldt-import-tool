@@ -18,6 +18,12 @@ export default function AdminPage() {
   const [recipientEmail, setRecipientEmail] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [templateUploadStatus, setTemplateUploadStatus] = useState<string | null>(null);
+  const [templateFileName, setTemplateFileName] = useState<string | null>(null);
+  const [templateEvent, setTemplateEvent] = useState("");
+  const [templateRace, setTemplateRace] = useState("");
+  const [templateTicket, setTemplateTicket] = useState("");
+  const [templateName, setTemplateName] = useState("");
 
   useEffect(() => {
     async function checkSession() {
@@ -110,8 +116,28 @@ export default function AdminPage() {
     event.preventDefault();
     setStatus(null);
     setError(null);
+    setTemplateUploadStatus(null);
 
-    const formData = new FormData(event.currentTarget);
+    const formData = new FormData();
+    if (!templateEvent || !templateRace || !templateTicket) {
+      setError("Event, race, and ticket are required.");
+      return;
+    }
+    if (!templateFileName) {
+      setError("Please choose a template CSV file.");
+      return;
+    }
+    formData.append("eventName", templateEvent);
+    formData.append("raceName", templateRace);
+    formData.append("ticketName", templateTicket);
+    formData.append("name", templateName);
+    const fileInput = document.getElementById("template-file") as HTMLInputElement | null;
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      setError("Please choose a template CSV file.");
+      return;
+    }
+    formData.append("file", file);
     const response = await fetch("/api/admin/templates", {
       method: "POST",
       body: formData,
@@ -124,9 +150,14 @@ export default function AdminPage() {
     }
 
     setStatus("Template uploaded.");
-    const form = event.currentTarget;
-    if (form instanceof HTMLFormElement) {
-      form.reset();
+    setTemplateUploadStatus("Upload successful");
+    setTemplateEvent("");
+    setTemplateRace("");
+    setTemplateTicket("");
+    setTemplateName("");
+    setTemplateFileName(null);
+    if (fileInput) {
+      fileInput.value = "";
     }
     fetchSettingsAndTemplates().catch(() => {
       setError("Failed to refresh templates.");
@@ -252,6 +283,8 @@ export default function AdminPage() {
                 <input
                   name="eventName"
                   required
+                  value={templateEvent}
+                  onChange={(event) => setTemplateEvent(event.target.value)}
                   className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
                 />
               </div>
@@ -262,6 +295,8 @@ export default function AdminPage() {
                 <input
                   name="raceName"
                   required
+                  value={templateRace}
+                  onChange={(event) => setTemplateRace(event.target.value)}
                   className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
                 />
               </div>
@@ -272,6 +307,8 @@ export default function AdminPage() {
                 <input
                   name="ticketName"
                   required
+                  value={templateTicket}
+                  onChange={(event) => setTemplateTicket(event.target.value)}
                   className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
                 />
               </div>
@@ -282,6 +319,8 @@ export default function AdminPage() {
                 <input
                   name="name"
                   placeholder="Event / Race / Ticket"
+                  value={templateName}
+                  onChange={(event) => setTemplateName(event.target.value)}
                   className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
                 />
               </div>
@@ -290,13 +329,32 @@ export default function AdminPage() {
               <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
                 Template CSV file
               </label>
-              <input
-                name="file"
-                type="file"
-                accept=".csv"
-                required
-                className="block w-full text-sm"
-              />
+              <label className="inline-flex cursor-pointer items-center gap-3 rounded-full border border-black/20 bg-white px-4 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--foreground)]">
+                Choose CSV file
+                <input
+                  id="template-file"
+                  name="file"
+                  type="file"
+                  accept=".csv"
+                  required
+                  onChange={(event) => {
+                    const nextFile = event.target.files?.[0];
+                    setTemplateFileName(nextFile?.name ?? null);
+                    setTemplateUploadStatus(nextFile ? "Upload successful" : null);
+                  }}
+                  className="hidden"
+                />
+              </label>
+              {templateFileName && (
+                <p className="mt-2 text-sm text-[color:var(--foreground)]">
+                  {templateFileName}
+                </p>
+              )}
+              {templateUploadStatus && (
+                <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--forest)]">
+                  {templateUploadStatus}
+                </p>
+              )}
             </div>
             <button
               type="submit"
@@ -326,6 +384,25 @@ export default function AdminPage() {
                     {template.event_name} / {template.race_name} / {template.ticket_name}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!confirm("Delete this template?")) return;
+                    const response = await fetch(`/api/admin/templates/${template.id}`, {
+                      method: "DELETE",
+                    });
+                    if (!response.ok) {
+                      setError("Failed to delete template.");
+                      return;
+                    }
+                    fetchSettingsAndTemplates().catch(() => {
+                      setError("Failed to refresh templates.");
+                    });
+                  }}
+                  className="rounded-full border border-black/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]"
+                >
+                  Delete
+                </button>
               </div>
             ))}
           </div>

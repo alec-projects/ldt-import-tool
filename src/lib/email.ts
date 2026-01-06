@@ -10,7 +10,7 @@ export function getResendClient() {
 }
 
 export async function sendImportEmail(params: {
-  to: string;
+  to: string[];
   subject: string;
   text: string;
   filename: string;

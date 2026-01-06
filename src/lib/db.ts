@@ -39,8 +39,13 @@ export async function ensureSchema() {
       ticket_name TEXT,
       status TEXT NOT NULL,
       recipient_email TEXT,
+      client_email TEXT,
       error_message TEXT
     )
+  `;
+  await sql`
+    ALTER TABLE import_logs
+    ADD COLUMN IF NOT EXISTS client_email TEXT
   `;
 }
 
@@ -63,6 +68,7 @@ export type ImportLogCreate = {
   ticketName?: string;
   status: "success" | "error";
   recipientEmail?: string;
+  clientEmail?: string;
   errorMessage?: string;
 };
 
@@ -98,6 +104,12 @@ export async function createTemplate(input: {
   return result.rows[0];
 }
 
+export async function deleteTemplate(id: number) {
+  await sql`
+    DELETE FROM templates WHERE id = ${id}
+  `;
+}
+
 export async function getSetting(key: string) {
   const result = await sql<{ value: string }>`
     SELECT value FROM settings WHERE key = ${key}
@@ -125,6 +137,7 @@ export async function createImportLog(input: ImportLogCreate) {
       ticket_name,
       status,
       recipient_email,
+      client_email,
       error_message
     )
     VALUES (
@@ -136,6 +149,7 @@ export async function createImportLog(input: ImportLogCreate) {
       ${input.ticketName ?? null},
       ${input.status},
       ${input.recipientEmail ?? null},
+      ${input.clientEmail ?? null},
       ${input.errorMessage ?? null}
     )
   `;
