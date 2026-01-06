@@ -16,5 +16,6 @@ const sessionOptions: SessionOptions = {
 };
 
 export async function getAdminSession() {
-  return getIronSession<AdminSession>(cookies(), sessionOptions);
+  const cookieStore = await cookies();
+  return getIronSession<AdminSession>(cookieStore, sessionOptions);
 }
