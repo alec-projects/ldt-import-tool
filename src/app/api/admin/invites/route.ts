@@ -52,11 +52,10 @@ export async function POST(request: Request) {
   const inviteUrl = `${baseUrl}/admin/accept?token=${invite.token}`;
 
   try {
-    await sendAdminInviteEmail({ to: email, inviteUrl });
+    const result = await sendAdminInviteEmail({ to: email, inviteUrl });
+    return Response.json({ ok: true, id: (result as { data?: { id?: string } }).data?.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to send invite.";
     return Response.json({ error: message }, { status: 500 });
   }
-
-  return Response.json({ ok: true });
 }

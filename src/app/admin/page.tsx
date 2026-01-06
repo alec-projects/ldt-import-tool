@@ -189,13 +189,13 @@ export default function AdminPage() {
     });
 
     const raw = await response.text();
-    const data = raw ? (JSON.parse(raw) as { error?: string }) : {};
+    const data = raw ? (JSON.parse(raw) as { error?: string; id?: string }) : {};
     if (!response.ok) {
       setError(data.error || "Failed to send invite.");
       return;
     }
 
-    setStatus("Invite sent.");
+    setStatus(data.id ? `Invite sent (id: ${data.id}).` : "Invite sent.");
     setInviteEmail("");
   }
 

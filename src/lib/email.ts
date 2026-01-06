@@ -18,7 +18,7 @@ export async function sendImportEmail(params: {
 }) {
   const resend = getResendClient();
 
-  return resend.emails.send({
+  const result = await resend.emails.send({
     from: process.env.RESEND_FROM || "Participant Import <onboarding@resend.dev>",
     to: params.to,
     subject: params.subject,
@@ -30,6 +30,10 @@ export async function sendImportEmail(params: {
       },
     ],
   });
+  if ("error" in result && result.error) {
+    throw new Error(result.error.message || "Resend error");
+  }
+  return result;
 }
 
 export async function sendAdminInviteEmail(params: {
@@ -38,10 +42,14 @@ export async function sendAdminInviteEmail(params: {
 }) {
   const resend = getResendClient();
 
-  return resend.emails.send({
+  const result = await resend.emails.send({
     from: process.env.RESEND_FROM || "Participant Import <onboarding@resend.dev>",
     to: params.to,
     subject: "You have been invited as an admin",
     text: `You have been invited to manage Participant Import Builder. Set your password here: ${params.inviteUrl}`,
   });
+  if ("error" in result && result.error) {
+    throw new Error(result.error.message || "Resend error");
+  }
+  return result;
 }
