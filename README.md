@@ -112,3 +112,16 @@ Recommended for validation + UI.
   }
 }
 ```
+
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+## Database (Vercel Postgres)
+
+1. Create a Vercel Postgres database in the Vercel dashboard.
+2. Add the `POSTGRES_URL` value to `.env.local` (see `.env.example`).
+3. Verify connectivity at `http://localhost:3000/api/health/db`.
