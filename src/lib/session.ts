@@ -1,11 +1,11 @@
-import { getIronSession, IronSessionOptions } from "iron-session";
+import { getIronSession, SessionOptions } from "iron-session";
 import { cookies } from "next/headers";
 
 export type AdminSession = {
   adminEmail?: string;
 };
 
-const sessionOptions: IronSessionOptions = {
+const sessionOptions: SessionOptions = {
   cookieName: "ldt_admin_session",
   password:
     process.env.SESSION_PASSWORD ??
