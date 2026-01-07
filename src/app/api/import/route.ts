@@ -1,5 +1,6 @@
 import { createImportLog, ensureSchema, getSetting, listTemplates } from "@/lib/db";
 import { sendImportEmail } from "@/lib/email";
+import { getClientIp, getRateLimitConfig, rateLimit } from "@/lib/rate-limit";
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 
@@ -28,7 +29,36 @@ function findRosterHeader(headers: string[], type: "firstname" | "lastname" | "e
   return null;
 }
 
+const importRateLimit = getRateLimitConfig("IMPORT_RATE_LIMIT", {
+  windowMs: 60 * 60 * 1000,
+  max: 25,
+});
+
+const DEFAULT_MAX_IMPORT_BYTES = 10 * 1024 * 1024;
+
+function resolveMaxImportBytes() {
+  const parsed = Number(process.env.IMPORT_MAX_FILE_BYTES);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_MAX_IMPORT_BYTES;
+  }
+  return Math.floor(parsed);
+}
+
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  const limit = rateLimit(`import:${ip}`, importRateLimit);
+  if (!limit.ok) {
+    return Response.json(
+      { error: "Too many imports. Try again later." },
+      {
+        status: 429,
+        headers: limit.retryAfter
+          ? { "Retry-After": String(limit.retryAfter) }
+          : undefined,
+      },
+    );
+  }
+
   await ensureSchema();
 
   const formData = await request.formData();
@@ -44,10 +74,21 @@ export async function POST(request: Request) {
     return Response.json({ error: "CSV file is required." }, { status: 400 });
   }
 
+  const maxImportBytes = resolveMaxImportBytes();
+  if (file.size === 0) {
+    return Response.json({ error: "CSV file is empty." }, { status: 400 });
+  }
+  if (file.size > maxImportBytes) {
+    return Response.json({ error: "CSV file is too large." }, { status: 413 });
+  }
 
   let fieldValues: FieldValues = {};
   try {
-    fieldValues = JSON.parse(fieldsRaw) as FieldValues;
+    const parsed = JSON.parse(fieldsRaw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Invalid field values.");
+    }
+    fieldValues = parsed as FieldValues;
   } catch {
     return Response.json({ error: "Invalid field values." }, { status: 400 });
   }
@@ -61,12 +102,17 @@ export async function POST(request: Request) {
   const text = await file.text();
   const delimiter =
     text.includes("\t") && !text.includes(",") ? "\t" : ",";
-  const records = parse(text, {
-    columns: true,
-    delimiter,
-    skip_empty_lines: true,
-    trim: true,
-  }) as Record<string, string>[];
+  let records: Record<string, string>[];
+  try {
+    records = parse(text, {
+      columns: true,
+      delimiter,
+      skip_empty_lines: true,
+      trim: true,
+    }) as Record<string, string>[];
+  } catch {
+    return Response.json({ error: "Unable to parse CSV file." }, { status: 400 });
+  }
 
   if (records.length === 0) {
     return Response.json({ error: "CSV has no rows." }, { status: 400 });
@@ -74,7 +120,12 @@ export async function POST(request: Request) {
 
   const rowCount = records.length;
   const fileName = file.name;
-  const requiredColumns = new Set(template.required_columns ?? []);
+  const templateColumns = Array.isArray(template.columns)
+    ? template.columns
+    : [];
+  const requiredColumns = new Set(
+    Array.isArray(template.required_columns) ? template.required_columns : [],
+  );
 
   const headers = Object.keys(records[0] ?? {});
   const firstHeader = findRosterHeader(headers, "firstname");
@@ -91,7 +142,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const missingRequiredFields = template.columns
+  const missingRequiredFields = templateColumns
     .filter((column) => requiredColumns.has(column))
     .filter((column) => !isRosterField(column))
     .filter((column) => (fieldValues[column]?.trim() ?? "") === "");
@@ -108,16 +159,16 @@ export async function POST(request: Request) {
 
   try {
     const outputRows = records.map((row) => {
-      return template.columns.map((column) => {
+      return templateColumns.map((column) => {
         const normalized = normalizeKey(column);
         if (normalized === "firstname") {
-          return row[firstHeader]?.trim() ?? "";
+          return String(row[firstHeader] ?? "").trim();
         }
         if (normalized === "lastname") {
-          return row[lastHeader]?.trim() ?? "";
+          return String(row[lastHeader] ?? "").trim();
         }
         if (normalized === "email") {
-          return row[emailHeader]?.trim() ?? "";
+          return String(row[emailHeader] ?? "").trim();
         }
         return fieldValues[column] ?? "";
       });
@@ -125,7 +176,7 @@ export async function POST(request: Request) {
 
     for (const [index, row] of outputRows.entries()) {
       for (const [colIndex, value] of row.entries()) {
-        const columnName = template.columns[colIndex];
+        const columnName = templateColumns[colIndex];
         const isRequired =
           requiredColumns.has(columnName) ||
           normalizeKey(columnName) === "firstname" ||
@@ -139,7 +190,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const outputColumns = template.columns.map((column) => {
+    const outputColumns = templateColumns.map((column) => {
       const normalized = normalizeKey(column);
       if (normalized === "email") {
         return "Email Address";

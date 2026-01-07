@@ -2,6 +2,16 @@ import { createTemplate, ensureSchema, listTemplates } from "@/lib/db";
 import { getAdminSession } from "@/lib/session";
 import { parse } from "csv-parse/sync";
 
+const DEFAULT_MAX_TEMPLATE_BYTES = 2 * 1024 * 1024;
+
+function resolveMaxTemplateBytes() {
+  const parsed = Number(process.env.TEMPLATE_MAX_FILE_BYTES);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_MAX_TEMPLATE_BYTES;
+  }
+  return Math.floor(parsed);
+}
+
 function extractColumns(content: string) {
   const trimmed = content.trim();
   const delimiter =
@@ -42,6 +52,17 @@ export async function POST(request: Request) {
 
   if (!file || !(file instanceof File)) {
     return Response.json({ error: "Template CSV file is required." }, { status: 400 });
+  }
+
+  const maxTemplateBytes = resolveMaxTemplateBytes();
+  if (file.size === 0) {
+    return Response.json({ error: "Template CSV file is empty." }, { status: 400 });
+  }
+  if (file.size > maxTemplateBytes) {
+    return Response.json(
+      { error: "Template CSV file is too large." },
+      { status: 413 },
+    );
   }
 
   if (!eventName || !raceName || !ticketName) {

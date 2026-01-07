@@ -1,4 +1,5 @@
 import { createAdminUser, ensureSchema, getAdminByEmail } from "@/lib/db";
+import { getClientIp, getRateLimitConfig, rateLimit } from "@/lib/rate-limit";
 import { getAdminSession } from "@/lib/session";
 import bcrypt from "bcryptjs";
 import { timingSafeEqual } from "crypto";
@@ -14,7 +15,26 @@ function safeEqual(a: string, b: string) {
   return aBuf.length === bBuf.length && timingSafeEqual(aBuf, bBuf);
 }
 
+const loginRateLimit = getRateLimitConfig("LOGIN_RATE_LIMIT", {
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+});
+
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  const limit = rateLimit(`admin-login:${ip}`, loginRateLimit);
+  if (!limit.ok) {
+    return Response.json(
+      { error: "Too many login attempts. Try again later." },
+      {
+        status: 429,
+        headers: limit.retryAfter
+          ? { "Retry-After": String(limit.retryAfter) }
+          : undefined,
+      },
+    );
+  }
+
   await ensureSchema();
   const body = (await request.json().catch(() => ({}))) as LoginPayload;
   const expectedEmail = process.env.ADMIN_EMAIL;
