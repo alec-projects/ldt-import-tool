@@ -16,6 +16,7 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [recipientEmail, setRecipientEmail] = useState("");
+  const [homepageAccessCode, setHomepageAccessCode] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [templateUploadStatus, setTemplateUploadStatus] = useState<string | null>(null);
@@ -24,6 +25,11 @@ export default function AdminPage() {
   const [templateRace, setTemplateRace] = useState("");
   const [templateTicket, setTemplateTicket] = useState("");
   const [templateName, setTemplateName] = useState("");
+  const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
+  const [editTemplateEvent, setEditTemplateEvent] = useState("");
+  const [editTemplateRace, setEditTemplateRace] = useState("");
+  const [editTemplateTicket, setEditTemplateTicket] = useState("");
+  const [editTemplateName, setEditTemplateName] = useState("");
 
   useEffect(() => {
     async function checkSession() {
@@ -47,6 +53,7 @@ export default function AdminPage() {
     if (settingsRes.ok) {
       const data = await settingsRes.json();
       setRecipientEmail(data.recipientEmail ?? "");
+      setHomepageAccessCode(data.homepageAccessCode ?? "");
     }
 
     if (templatesRes.ok) {
@@ -101,7 +108,7 @@ export default function AdminPage() {
     const response = await fetch("/api/admin/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recipientEmail }),
+      body: JSON.stringify({ recipientEmail, homepageAccessCode }),
     });
 
     if (!response.ok) {
@@ -160,6 +167,54 @@ export default function AdminPage() {
     if (fileInput) {
       fileInput.value = "";
     }
+    fetchSettingsAndTemplates().catch(() => {
+      setError("Failed to refresh templates.");
+    });
+  }
+
+  function startEdit(template: Template) {
+    setEditingTemplateId(template.id);
+    setEditTemplateEvent(template.event_name);
+    setEditTemplateRace(template.race_name);
+    setEditTemplateTicket(template.ticket_name);
+    setEditTemplateName(template.name);
+    setStatus(null);
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditingTemplateId(null);
+    setEditTemplateEvent("");
+    setEditTemplateRace("");
+    setEditTemplateTicket("");
+    setEditTemplateName("");
+  }
+
+  async function handleTemplateUpdate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingTemplateId) return;
+    setStatus(null);
+    setError(null);
+
+    const response = await fetch(`/api/admin/templates/${editingTemplateId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        eventName: editTemplateEvent,
+        raceName: editTemplateRace,
+        ticketName: editTemplateTicket,
+        name: editTemplateName,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error || "Failed to update template.");
+      return;
+    }
+
+    setStatus("Template updated.");
+    cancelEdit();
     fetchSettingsAndTemplates().catch(() => {
       setError("Failed to refresh templates.");
     });
@@ -238,12 +293,20 @@ export default function AdminPage() {
               Manage template uploads and email delivery.
             </p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="rounded-full border border-black/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
-          >
-            Sign out
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href="/"
+              className="rounded-full border border-black/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
+            >
+              Back to homepage
+            </a>
+            <button
+              onClick={handleLogout}
+              className="rounded-full border border-black/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
+            >
+              Sign out
+            </button>
+          </div>
         </header>
 
         <section className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.35)]">
@@ -261,6 +324,18 @@ export default function AdminPage() {
                 value={recipientEmail}
                 onChange={(event) => setRecipientEmail(event.target.value)}
                 className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                Homepage access code
+              </label>
+              <input
+                type="password"
+                value={homepageAccessCode}
+                onChange={(event) => setHomepageAccessCode(event.target.value)}
+                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                placeholder="Leave blank to disable"
               />
             </div>
             <button
@@ -373,40 +448,124 @@ export default function AdminPage() {
           </h2>
           <div className="mt-4 space-y-2 text-sm text-[color:var(--ink-muted)]">
             {templates.length === 0 && <p>No templates uploaded yet.</p>}
-            {templates.map((template) => (
-              <div
-                key={template.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-black/10 bg-white/60 px-4 py-3"
-              >
-                <div>
-                  <div className="font-medium text-[color:var(--foreground)]">
-                    {template.name}
-                  </div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
-                    {template.event_name} / {template.race_name} / {template.ticket_name}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!confirm("Delete this template?")) return;
-                    const response = await fetch(`/api/admin/templates/${template.id}`, {
-                      method: "DELETE",
-                    });
-                    if (!response.ok) {
-                      setError("Failed to delete template.");
-                      return;
-                    }
-                    fetchSettingsAndTemplates().catch(() => {
-                      setError("Failed to refresh templates.");
-                    });
-                  }}
-                  className="rounded-full border border-black/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]"
+            {templates.map((template) => {
+              const isEditing = editingTemplateId === template.id;
+              return (
+                <div
+                  key={template.id}
+                  className="rounded-2xl border border-black/10 bg-white/60 px-4 py-3"
                 >
-                  Delete
-                </button>
-              </div>
-            ))}
+                  {isEditing ? (
+                    <form onSubmit={handleTemplateUpdate} className="flex flex-col gap-4">
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                            Event name
+                          </label>
+                          <input
+                            value={editTemplateEvent}
+                            onChange={(event) => setEditTemplateEvent(event.target.value)}
+                            required
+                            className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                            Race name
+                          </label>
+                          <input
+                            value={editTemplateRace}
+                            onChange={(event) => setEditTemplateRace(event.target.value)}
+                            required
+                            className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                            Ticket name
+                          </label>
+                          <input
+                            value={editTemplateTicket}
+                            onChange={(event) => setEditTemplateTicket(event.target.value)}
+                            required
+                            className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                            Display name (optional)
+                          </label>
+                          <input
+                            value={editTemplateName}
+                            onChange={(event) => setEditTemplateName(event.target.value)}
+                            placeholder="Event / Race / Ticket"
+                            className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="submit"
+                          className="rounded-full bg-[color:var(--forest)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:translate-y-[-1px] hover:bg-[#14523d]"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          className="rounded-full border border-black/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="font-medium text-[color:var(--foreground)]">
+                          {template.name}
+                        </div>
+                        <div className="text-xs uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                          {template.event_name} / {template.race_name} /{" "}
+                          {template.ticket_name}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(template)}
+                          className="rounded-full border border-black/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm("Delete this template?")) return;
+                            const response = await fetch(
+                              `/api/admin/templates/${template.id}`,
+                              {
+                                method: "DELETE",
+                              },
+                            );
+                            if (!response.ok) {
+                              setError("Failed to delete template.");
+                              return;
+                            }
+                            fetchSettingsAndTemplates().catch(() => {
+                              setError("Failed to refresh templates.");
+                            });
+                          }}
+                          className="rounded-full border border-black/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
 

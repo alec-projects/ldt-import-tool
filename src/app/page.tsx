@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Template = {
   id: number;
@@ -24,6 +24,10 @@ type TemplateOption = {
   requiredColumns: string[];
 };
 
+type AccessState = "loading" | "locked" | "unlocked";
+
+const ACCESS_CODE_STORAGE_KEY = "ldt_access_code";
+
 function normalizeKey(value: string) {
   return value.replace(/^#+/, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -35,6 +39,9 @@ function isRosterField(column: string) {
 
 export default function Home() {
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [accessState, setAccessState] = useState<AccessState>("loading");
+  const [accessCode, setAccessCode] = useState("");
+  const [accessError, setAccessError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
   const [selectedRace, setSelectedRace] = useState("");
   const [selectedTicket, setSelectedTicket] = useState("");
@@ -45,9 +52,35 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    async function loadTemplates() {
-      const response = await fetch("/api/templates");
+  const loadTemplates = useCallback(async (code: string) => {
+    setAccessState("loading");
+    setAccessError(null);
+    const headers: HeadersInit = {};
+    if (code) {
+      headers["x-access-code"] = code;
+    }
+
+    try {
+      const response = await fetch("/api/templates", { headers });
+      if (response.status === 401) {
+        setAccessState("locked");
+        setTemplates([]);
+        setSelectedEvent("");
+        setSelectedRace("");
+        setSelectedTicket("");
+        setAccessError(code ? "Access code not recognized." : "Access code required.");
+        setError(null);
+        window.localStorage.removeItem(ACCESS_CODE_STORAGE_KEY);
+        return;
+      }
+
+      if (!response.ok) {
+        setAccessState("unlocked");
+        setTemplates([]);
+        setError("Unable to load templates. Please try again later.");
+        return;
+      }
+
       const data = (await response.json()) as { templates: Template[] };
       const mapped = data.templates.map((template) => ({
         id: template.id,
@@ -59,12 +92,26 @@ export default function Home() {
         requiredColumns: template.required_columns,
       }));
       setTemplates(mapped);
-    }
-
-    loadTemplates().catch(() => {
+      setAccessState("unlocked");
+      setError(null);
+      if (code) {
+        window.localStorage.setItem(ACCESS_CODE_STORAGE_KEY, code);
+      } else {
+        window.localStorage.removeItem(ACCESS_CODE_STORAGE_KEY);
+      }
+    } catch {
+      setAccessState("unlocked");
       setError("Unable to load templates. Please try again later.");
-    });
+    }
   }, []);
+
+  useEffect(() => {
+    const storedCode = window.localStorage.getItem(ACCESS_CODE_STORAGE_KEY) ?? "";
+    if (storedCode) {
+      setAccessCode(storedCode);
+    }
+    loadTemplates(storedCode);
+  }, [loadTemplates]);
 
   const events = useMemo(() => {
     return Array.from(new Set(templates.map((template) => template.event)));
@@ -113,7 +160,12 @@ export default function Home() {
 
   function inputTypeForColumn(column: string) {
     const normalized = normalizeKey(column);
-    if (normalized.includes("bookedat")) {
+    if (
+      normalized.includes("bookedat") ||
+      normalized.includes("dateofbirth") ||
+      normalized === "dob" ||
+      normalized === "birthdate"
+    ) {
       return "date";
     }
     return "text";
@@ -132,6 +184,13 @@ export default function Home() {
 
   function handleFieldChange(column: string, value: string) {
     setFieldValues((prev) => ({ ...prev, [column]: value }));
+  }
+
+  async function handleAccessSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = accessCode.trim();
+    setAccessCode(trimmed);
+    await loadTemplates(trimmed);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -157,10 +216,23 @@ export default function Home() {
       formData.append("file", file);
       formData.append("fields", JSON.stringify(fieldValues));
 
+      const headers: HeadersInit = {};
+      if (accessCode) {
+        headers["x-access-code"] = accessCode;
+      }
+
       const response = await fetch("/api/import", {
         method: "POST",
         body: formData,
+        headers,
       });
+
+      if (response.status === 401) {
+        setAccessState("locked");
+        setAccessError("Access code required.");
+        window.localStorage.removeItem(ACCESS_CODE_STORAGE_KEY);
+        return;
+      }
 
       const data = await response.json();
       if (!response.ok) {
@@ -176,6 +248,71 @@ export default function Home() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (accessState === "loading") {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f9eddc_0%,#f7f3ee_48%,#efe6da_100%)] px-6 py-16">
+        <div className="mx-auto w-full max-w-md rounded-3xl border border-black/10 bg-white/70 p-6 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.35)]">
+          <p className="text-sm text-[color:var(--ink-muted)]">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (accessState === "locked") {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f9eddc_0%,#f7f3ee_48%,#efe6da_100%)] px-6 py-16">
+        <main className="mx-auto flex w-full max-w-md flex-col gap-6">
+          <header className="space-y-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+              Participant Import Builder
+            </span>
+            <h1 className="text-2xl font-semibold text-[color:var(--foreground)]">
+              Enter access code
+            </h1>
+            <p className="text-sm text-[color:var(--ink-muted)]">
+              This page is protected. Enter the shared code to continue.
+            </p>
+          </header>
+          <form
+            onSubmit={handleAccessSubmit}
+            className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.35)]"
+          >
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                Access code
+              </label>
+              <input
+                type="password"
+                value={accessCode}
+                onChange={(event) => setAccessCode(event.target.value)}
+                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                required
+              />
+            </div>
+            {accessError && (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {accessError}
+              </div>
+            )}
+            <button
+              type="submit"
+              className="mt-4 w-full rounded-full bg-[color:var(--forest)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:translate-y-[-1px] hover:bg-[#14523d]"
+            >
+              Unlock
+            </button>
+          </form>
+          <p className="text-xs text-[color:var(--ink-muted)]">
+            Admin? Manage templates and settings at{" "}
+            <a className="font-semibold text-[color:var(--foreground)] underline" href="/admin">
+              admin
+            </a>
+            .
+          </p>
+        </main>
+      </div>
+    );
   }
 
   return (

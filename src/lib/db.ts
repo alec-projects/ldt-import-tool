@@ -136,7 +136,31 @@ export async function createTemplate(input: {
   return result.rows[0];
 }
 
+export async function updateTemplate(input: {
+  id: number;
+  name: string;
+  eventName: string;
+  raceName: string;
+  ticketName: string;
+}) {
+  const result = await sql<TemplateRecord>`
+    UPDATE templates
+    SET name = ${input.name},
+        event_name = ${input.eventName},
+        race_name = ${input.raceName},
+        ticket_name = ${input.ticketName}
+    WHERE id = ${input.id}
+    RETURNING id, name, event_name, race_name, ticket_name, columns, required_columns
+  `;
+  return result.rows[0] ?? null;
+}
+
 export async function deleteTemplate(id: number) {
+  await sql`
+    UPDATE import_logs
+    SET template_id = NULL
+    WHERE template_id = ${id}
+  `;
   await sql`
     DELETE FROM templates WHERE id = ${id}
   `;

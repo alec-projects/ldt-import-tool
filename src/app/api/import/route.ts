@@ -1,3 +1,4 @@
+import { isAccessCodeValid } from "@/lib/access-code";
 import { createImportLog, ensureSchema, getSetting, listTemplates } from "@/lib/db";
 import { sendImportEmail } from "@/lib/email";
 import { getClientIp, getRateLimitConfig, rateLimit } from "@/lib/rate-limit";
@@ -60,6 +61,12 @@ export async function POST(request: Request) {
   }
 
   await ensureSchema();
+
+  const configuredAccessCode = await getSetting("homepage_access_code");
+  const providedAccessCode = request.headers.get("x-access-code");
+  if (!isAccessCodeValid(configuredAccessCode, providedAccessCode)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const formData = await request.formData();
   const templateId = Number(formData.get("templateId"));
