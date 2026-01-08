@@ -28,6 +28,121 @@ type AccessState = "loading" | "locked" | "unlocked";
 
 const ACCESS_CODE_STORAGE_KEY = "ldt_access_code";
 const EMAIL_ALIASES = new Set(["email", "emailaddress", "emailaddr"]);
+const FIRST_NAMES = [
+  "Avery",
+  "Jordan",
+  "Casey",
+  "Taylor",
+  "Riley",
+  "Morgan",
+  "Drew",
+  "Hayden",
+  "Logan",
+  "Parker",
+];
+const LAST_NAMES = [
+  "Reed",
+  "Parker",
+  "Carter",
+  "Bailey",
+  "Bennett",
+  "Murphy",
+  "Foster",
+  "Hayes",
+  "Coleman",
+  "Sutton",
+];
+const STREET_NAMES = ["Main", "Oak", "Pine", "Cedar", "Maple", "Elm", "Sunset", "Ridge"];
+const STREET_SUFFIXES = ["St", "Ave", "Rd", "Ln", "Blvd", "Dr", "Way"];
+const CITIES = [
+  "Springfield",
+  "Riverton",
+  "Fairview",
+  "Madison",
+  "Georgetown",
+  "Franklin",
+  "Clinton",
+  "Arlington",
+];
+const STATES = ["CA", "NY", "TX", "FL", "IL", "WA", "CO", "NC", "GA", "AZ"];
+const COMPANY_NAMES = [
+  "Acme Events",
+  "Summit Athletics",
+  "Northstar Sports",
+  "Pioneer Running Club",
+  "Blue Ridge Racing",
+];
+const TEAM_NAMES = ["Team Falcon", "Team Horizon", "Team Summit", "Team Canyon"];
+const SHIRT_SIZES = ["XS", "S", "M", "L", "XL"];
+
+type GeneratedProfile = {
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  address: string;
+  address2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  company: string;
+  team: string;
+};
+
+function randomInt(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randomFrom<T>(items: T[]) {
+  return items[randomInt(0, items.length - 1)] ?? items[0];
+}
+
+function randomDateISO(start: Date, end: Date) {
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  const timestamp = startMs + Math.random() * (endMs - startMs);
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
+function randomPhone() {
+  const area = randomInt(201, 989);
+  const prefix = randomInt(200, 999);
+  const line = randomInt(1000, 9999);
+  return `${area}-${prefix}-${line}`;
+}
+
+function randomPostalCode() {
+  return String(randomInt(10000, 99999));
+}
+
+function randomAddress() {
+  const number = randomInt(100, 9999);
+  return `${number} ${randomFrom(STREET_NAMES)} ${randomFrom(STREET_SUFFIXES)}`;
+}
+
+function createGeneratedProfile(): GeneratedProfile {
+  const firstName = randomFrom(FIRST_NAMES);
+  const lastName = randomFrom(LAST_NAMES);
+  const fullName = `${firstName} ${lastName}`;
+  const emailToken = randomInt(10, 99);
+  return {
+    firstName,
+    lastName,
+    fullName,
+    email: `${firstName}.${lastName}${emailToken}@example.com`.toLowerCase(),
+    phone: randomPhone(),
+    address: randomAddress(),
+    address2: `Apt ${randomInt(1, 40)}`,
+    city: randomFrom(CITIES),
+    state: randomFrom(STATES),
+    postalCode: randomPostalCode(),
+    country: "United States",
+    company: randomFrom(COMPANY_NAMES),
+    team: randomFrom(TEAM_NAMES),
+  };
+}
 
 function normalizeKey(value: string) {
   const normalized = value
@@ -166,6 +281,10 @@ export default function Home() {
     return new Set(selectedTemplate?.requiredColumns ?? []);
   }, [selectedTemplate]);
 
+  const requiredExtraFields = useMemo(() => {
+    return extraFields.filter((column) => requiredFields.has(column));
+  }, [extraFields, requiredFields]);
+
   function inputTypeForColumn(column: string) {
     const normalized = normalizeKey(column);
     if (
@@ -190,8 +309,152 @@ export default function Home() {
     return null;
   }
 
+  function generateValueForColumn(
+    column: string,
+    options: string[] | null,
+    profile: GeneratedProfile,
+  ) {
+    if (options && options.length > 0) {
+      return randomFrom(options);
+    }
+
+    const normalized = normalizeKey(column);
+    if (normalized.includes("event") && selectedEvent) {
+      return selectedEvent;
+    }
+    if (normalized.includes("race") && selectedRace) {
+      return selectedRace;
+    }
+    if (normalized.includes("ticket") && selectedTicket) {
+      return selectedTicket;
+    }
+
+    if (
+      normalized.includes("dateofbirth") ||
+      normalized === "dob" ||
+      normalized.includes("birthdate")
+    ) {
+      const end = new Date();
+      end.setFullYear(end.getFullYear() - 18);
+      const start = new Date();
+      start.setFullYear(start.getFullYear() - 65);
+      return randomDateISO(start, end);
+    }
+
+    if (inputTypeForColumn(column) === "date") {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(end.getDate() - 30);
+      return randomDateISO(start, end);
+    }
+
+    if (normalized.includes("firstname")) {
+      return profile.firstName;
+    }
+    if (normalized.includes("lastname")) {
+      return profile.lastName;
+    }
+    if (normalized.includes("name")) {
+      return profile.fullName;
+    }
+    if (normalized.includes("email")) {
+      return profile.email;
+    }
+    if (
+      normalized.includes("phone") ||
+      normalized.includes("mobile") ||
+      normalized.includes("number") ||
+      normalized.includes("tel")
+    ) {
+      return profile.phone;
+    }
+    if (
+      normalized.includes("address2") ||
+      normalized.includes("apt") ||
+      normalized.includes("suite")
+    ) {
+      return profile.address2;
+    }
+    if (normalized.includes("address") || normalized.includes("street")) {
+      return profile.address;
+    }
+    if (normalized.includes("city")) {
+      return profile.city;
+    }
+    if (normalized.includes("state") || normalized.includes("province")) {
+      return profile.state;
+    }
+    if (normalized.includes("zip") || normalized.includes("postal")) {
+      return profile.postalCode;
+    }
+    if (normalized.includes("country")) {
+      return profile.country;
+    }
+    if (
+      normalized.includes("company") ||
+      normalized.includes("organization") ||
+      normalized.includes("employer")
+    ) {
+      return profile.company;
+    }
+    if (normalized.includes("team") || normalized.includes("club")) {
+      return profile.team;
+    }
+    if (
+      normalized.includes("shirt") ||
+      normalized.includes("tshirt") ||
+      normalized.includes("size")
+    ) {
+      return randomFrom(SHIRT_SIZES);
+    }
+    if (normalized.includes("age")) {
+      return String(randomInt(18, 70));
+    }
+    if (normalized.includes("id")) {
+      return `ID${randomInt(10000, 99999)}`;
+    }
+    if (
+      normalized.includes("consent") ||
+      normalized.includes("agree") ||
+      normalized.includes("waiver")
+    ) {
+      return "Yes";
+    }
+    if (normalized.includes("notes") || normalized.includes("comment")) {
+      return "Auto generated";
+    }
+
+    return `Auto-${randomInt(1000, 9999)}`;
+  }
+
   function handleFieldChange(column: string, value: string) {
     setFieldValues((prev) => ({ ...prev, [column]: value }));
+  }
+
+  function handleAutoGenerateRequired() {
+    if (!selectedTemplate || requiredExtraFields.length === 0) return;
+    const hasExistingValues = requiredExtraFields.some(
+      (column) => (fieldValues[column]?.trim() ?? "") !== "",
+    );
+    if (hasExistingValues && !confirm("Overwrite existing required field values?")) {
+      return;
+    }
+
+    const profile = createGeneratedProfile();
+    setFieldValues((prev) => {
+      const next = { ...prev };
+      for (const column of requiredExtraFields) {
+        if (!hasExistingValues && (prev[column]?.trim() ?? "") !== "") {
+          continue;
+        }
+        next[column] = generateValueForColumn(
+          column,
+          selectOptionsForColumn(column),
+          profile,
+        );
+      }
+      return next;
+    });
   }
 
   async function handleAccessSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -448,9 +711,20 @@ export default function Home() {
               <div className="rounded-2xl border border-black/10 bg-[color:var(--sand)] px-4 py-3 text-sm text-[color:var(--ink-muted)]">
                 Template selected: <span className="font-medium">{selectedTemplate.name}</span>
               </div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
-                Only fields marked with * are required.
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                  Only fields marked with * are required.
+                </p>
+                {requiredExtraFields.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleAutoGenerateRequired}
+                    className="rounded-full border border-black/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]"
+                  >
+                    Auto fill required
+                  </button>
+                )}
+              </div>
               <div className="grid gap-4 md:grid-cols-2">
                 {extraFields.map((column) => (
                   <div key={column} className="space-y-2">
