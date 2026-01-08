@@ -64,16 +64,6 @@ const CITIES = [
   "Clinton",
   "Arlington",
 ];
-const COUNTIES = [
-  "Maricopa",
-  "Orange",
-  "King",
-  "Cook",
-  "Harris",
-  "Clark",
-  "Marion",
-  "Wake",
-];
 const STATES = ["CA", "NY", "TX", "FL", "IL", "WA", "CO", "NC", "GA", "AZ"];
 const COMPANY_NAMES = [
   "Acme Events",
@@ -94,7 +84,6 @@ type GeneratedProfile = {
   address: string;
   address2: string;
   city: string;
-  county: string;
   state: string;
   postalCode: string;
   country: string;
@@ -147,7 +136,6 @@ function createGeneratedProfile(): GeneratedProfile {
     address: randomAddress(),
     address2: `Apt ${randomInt(1, 40)}`,
     city: randomFrom(CITIES),
-    county: randomFrom(COUNTIES),
     state: randomFrom(STATES),
     postalCode: randomPostalCode(),
     country: "United States",
@@ -315,6 +303,9 @@ export default function Home() {
     if (normalized.includes("gender")) {
       return ["Male", "Female", "Prefer not to say"];
     }
+    if (normalized.includes("waiver")) {
+      return ["I agree"];
+    }
     if (normalized.includes("ldtemailconsentoptout")) {
       return ["OptOut"];
     }
@@ -380,48 +371,58 @@ export default function Home() {
     ) {
       return profile.phone;
     }
-    if (
-      normalized.includes("addressline2") ||
-      normalized.includes("address2") ||
-      normalized.includes("apt") ||
-      normalized.includes("suite")
-    ) {
-      return profile.address2;
+    if (normalized.includes("addressline")) {
+      if (normalized.includes("city")) {
+        return profile.city;
+      }
+      if (normalized.includes("county")) {
+        return profile.state;
+      }
+      if (normalized.includes("country")) {
+        return profile.country;
+      }
+      if (
+        normalized.includes("postal") ||
+        normalized.includes("postcode") ||
+        normalized.includes("zip")
+      ) {
+        return profile.postalCode;
+      }
+      if (normalized.includes("state") || normalized.includes("province")) {
+        return profile.state;
+      }
+      if (normalized.includes("2")) {
+        return profile.address2;
+      }
+      return profile.address;
     }
-    if (normalized.includes("addresslinecity") || normalized.includes("city")) {
+    if (normalized.includes("city")) {
       return profile.city;
     }
-    if (normalized.includes("addresslinecounty") || normalized.includes("county")) {
-      return profile.county;
+    if (normalized.includes("county")) {
+      return profile.state;
     }
     if (
-      normalized.includes("addresslinepostcode") ||
-      normalized.includes("addresslinepostal") ||
-      normalized.includes("addresslinezip") ||
       normalized.includes("postal") ||
       normalized.includes("postcode") ||
       normalized.includes("zip")
     ) {
       return profile.postalCode;
     }
-    if (
-      normalized.includes("addresslinestate") ||
-      normalized.includes("addresslineprovince") ||
-      normalized.includes("state") ||
-      normalized.includes("province")
-    ) {
+    if (normalized.includes("state") || normalized.includes("province")) {
       return profile.state;
     }
-    if (normalized.includes("addresslinecountry") || normalized.includes("country")) {
+    if (normalized.includes("country")) {
       return profile.country;
     }
     if (
-      normalized.includes("addressline1") ||
-      normalized.includes("address1") ||
-      normalized.includes("addressline") ||
-      normalized.includes("address") ||
-      normalized.includes("street")
+      normalized.includes("address2") ||
+      normalized.includes("apt") ||
+      normalized.includes("suite")
     ) {
+      return profile.address2;
+    }
+    if (normalized.includes("address") || normalized.includes("street")) {
       return profile.address;
     }
     if (
@@ -466,17 +467,12 @@ export default function Home() {
   }
 
   function handleAutoFill() {
-    if (!selectedTemplate || extraFields.length === 0) return;
-    const allBlank = extraFields.every(
-      (column) => (fieldValues[column]?.trim() ?? "") === "",
-    );
-    const targets =
-      allBlank && requiredExtraFields.length > 0 ? requiredExtraFields : extraFields;
+    if (!selectedTemplate || requiredExtraFields.length === 0) return;
 
     const profile = createGeneratedProfile();
     setFieldValues((prev) => {
       const next = { ...prev };
-      for (const column of targets) {
+      for (const column of requiredExtraFields) {
         if ((prev[column]?.trim() ?? "") !== "") {
           continue;
         }
@@ -748,7 +744,7 @@ export default function Home() {
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
                   Only fields marked with * are required.
                 </p>
-                {extraFields.length > 0 && (
+                {requiredExtraFields.length > 0 && (
                   <button
                     type="button"
                     onClick={handleAutoFill}
