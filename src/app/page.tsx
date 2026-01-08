@@ -64,6 +64,16 @@ const CITIES = [
   "Clinton",
   "Arlington",
 ];
+const COUNTIES = [
+  "Maricopa",
+  "Orange",
+  "King",
+  "Cook",
+  "Harris",
+  "Clark",
+  "Marion",
+  "Wake",
+];
 const STATES = ["CA", "NY", "TX", "FL", "IL", "WA", "CO", "NC", "GA", "AZ"];
 const COMPANY_NAMES = [
   "Acme Events",
@@ -84,6 +94,7 @@ type GeneratedProfile = {
   address: string;
   address2: string;
   city: string;
+  county: string;
   state: string;
   postalCode: string;
   country: string;
@@ -136,6 +147,7 @@ function createGeneratedProfile(): GeneratedProfile {
     address: randomAddress(),
     address2: `Apt ${randomInt(1, 40)}`,
     city: randomFrom(CITIES),
+    county: randomFrom(COUNTIES),
     state: randomFrom(STATES),
     postalCode: randomPostalCode(),
     country: "United States",
@@ -369,26 +381,48 @@ export default function Home() {
       return profile.phone;
     }
     if (
+      normalized.includes("addressline2") ||
       normalized.includes("address2") ||
       normalized.includes("apt") ||
       normalized.includes("suite")
     ) {
       return profile.address2;
     }
-    if (normalized.includes("address") || normalized.includes("street")) {
-      return profile.address;
-    }
-    if (normalized.includes("city")) {
+    if (normalized.includes("addresslinecity") || normalized.includes("city")) {
       return profile.city;
     }
-    if (normalized.includes("state") || normalized.includes("province")) {
-      return profile.state;
+    if (normalized.includes("addresslinecounty") || normalized.includes("county")) {
+      return profile.county;
     }
-    if (normalized.includes("zip") || normalized.includes("postal")) {
+    if (
+      normalized.includes("addresslinepostcode") ||
+      normalized.includes("addresslinepostal") ||
+      normalized.includes("addresslinezip") ||
+      normalized.includes("postal") ||
+      normalized.includes("postcode") ||
+      normalized.includes("zip")
+    ) {
       return profile.postalCode;
     }
-    if (normalized.includes("country")) {
+    if (
+      normalized.includes("addresslinestate") ||
+      normalized.includes("addresslineprovince") ||
+      normalized.includes("state") ||
+      normalized.includes("province")
+    ) {
+      return profile.state;
+    }
+    if (normalized.includes("addresslinecountry") || normalized.includes("country")) {
       return profile.country;
+    }
+    if (
+      normalized.includes("addressline1") ||
+      normalized.includes("address1") ||
+      normalized.includes("addressline") ||
+      normalized.includes("address") ||
+      normalized.includes("street")
+    ) {
+      return profile.address;
     }
     if (
       normalized.includes("company") ||
