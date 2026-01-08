@@ -431,20 +431,19 @@ export default function Home() {
     setFieldValues((prev) => ({ ...prev, [column]: value }));
   }
 
-  function handleAutoGenerateRequired() {
-    if (!selectedTemplate || requiredExtraFields.length === 0) return;
-    const hasExistingValues = requiredExtraFields.some(
-      (column) => (fieldValues[column]?.trim() ?? "") !== "",
+  function handleAutoFill() {
+    if (!selectedTemplate || extraFields.length === 0) return;
+    const allBlank = extraFields.every(
+      (column) => (fieldValues[column]?.trim() ?? "") === "",
     );
-    if (hasExistingValues && !confirm("Overwrite existing required field values?")) {
-      return;
-    }
+    const targets =
+      allBlank && requiredExtraFields.length > 0 ? requiredExtraFields : extraFields;
 
     const profile = createGeneratedProfile();
     setFieldValues((prev) => {
       const next = { ...prev };
-      for (const column of requiredExtraFields) {
-        if (!hasExistingValues && (prev[column]?.trim() ?? "") !== "") {
+      for (const column of targets) {
+        if ((prev[column]?.trim() ?? "") !== "") {
           continue;
         }
         next[column] = generateValueForColumn(
@@ -715,13 +714,13 @@ export default function Home() {
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
                   Only fields marked with * are required.
                 </p>
-                {requiredExtraFields.length > 0 && (
+                {extraFields.length > 0 && (
                   <button
                     type="button"
-                    onClick={handleAutoGenerateRequired}
+                    onClick={handleAutoFill}
                     className="rounded-full border border-black/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]"
                   >
-                    Auto fill required
+                    Auto fill
                   </button>
                 )}
               </div>
