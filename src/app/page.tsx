@@ -27,9 +27,17 @@ type TemplateOption = {
 type AccessState = "loading" | "locked" | "unlocked";
 
 const ACCESS_CODE_STORAGE_KEY = "ldt_access_code";
+const EMAIL_ALIASES = new Set(["email", "emailaddress", "emailaddr"]);
 
 function normalizeKey(value: string) {
-  return value.replace(/^#+/, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normalized = value
+    .replace(/^#+/, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  if (EMAIL_ALIASES.has(normalized)) {
+    return "email";
+  }
+  return normalized;
 }
 
 function isRosterField(column: string) {
