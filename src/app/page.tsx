@@ -182,6 +182,7 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [fileStatus, setFileStatus] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<FieldValues>({});
+  const [autoFilledValues, setAutoFilledValues] = useState<FieldValues>({});
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -486,20 +487,38 @@ export default function Home() {
     if (!selectedTemplate || requiredExtraFields.length === 0) return;
 
     const profile = createGeneratedProfile();
+    const next = { ...fieldValues };
+    const nextAutoFilled: FieldValues = {};
+    for (const column of requiredExtraFields) {
+      if ((next[column]?.trim() ?? "") !== "") {
+        continue;
+      }
+      const value = generateValueForColumn(
+        column,
+        selectOptionsForColumn(column),
+        profile,
+      );
+      next[column] = value;
+      nextAutoFilled[column] = value;
+    }
+    setFieldValues(next);
+    if (Object.keys(nextAutoFilled).length > 0) {
+      setAutoFilledValues((prev) => ({ ...prev, ...nextAutoFilled }));
+    }
+  }
+
+  function handleClearAutoFill() {
+    if (Object.keys(autoFilledValues).length === 0) return;
     setFieldValues((prev) => {
       const next = { ...prev };
-      for (const column of requiredExtraFields) {
-        if ((prev[column]?.trim() ?? "") !== "") {
-          continue;
+      for (const [column, value] of Object.entries(autoFilledValues)) {
+        if (next[column] === value) {
+          next[column] = "";
         }
-        next[column] = generateValueForColumn(
-          column,
-          selectOptionsForColumn(column),
-          profile,
-        );
       }
       return next;
     });
+    setAutoFilledValues({});
   }
 
   async function handleAccessSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -776,6 +795,15 @@ export default function Home() {
                     Auto fill
                   </button>
                 )}
+                {Object.keys(autoFilledValues).length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAutoFill}
+                    className="rounded-full border border-black/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]"
+                  >
+                    Clear auto fill
+                  </button>
+                )}
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 {extraFields.map((column) => (
@@ -783,6 +811,11 @@ export default function Home() {
                     <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
                       {column.replace(/^#+/, "")}
                       {requiredFields.has(column) ? " *" : ""}
+                      {isBookedAtField(column) && (
+                        <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                          must be today&apos;s date
+                        </span>
+                      )}
                     </label>
                     {selectOptionsForColumn(column) ? (
                       <select
