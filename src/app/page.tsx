@@ -106,6 +106,13 @@ function randomDateISO(start: Date, end: Date) {
   return new Date(timestamp).toISOString().slice(0, 10);
 }
 
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function randomPhone() {
   const area = randomInt(201, 989);
   const prefix = randomInt(200, 999);
@@ -153,6 +160,10 @@ function normalizeKey(value: string) {
     return "email";
   }
   return normalized;
+}
+
+function isBookedAtField(column: string) {
+  return normalizeKey(column).includes("bookedat");
 }
 
 function isRosterField(column: string) {
@@ -284,6 +295,7 @@ export default function Home() {
   const requiredExtraFields = useMemo(() => {
     return extraFields.filter((column) => requiredFields.has(column));
   }, [extraFields, requiredFields]);
+  const bookedAtValue = formatLocalDate(new Date());
 
   function inputTypeForColumn(column: string) {
     const normalized = normalizeKey(column);
@@ -330,6 +342,10 @@ export default function Home() {
     }
     if (normalized.includes("ticket") && selectedTicket) {
       return selectedTicket;
+    }
+
+    if (normalized.includes("bookedat")) {
+      return formatLocalDate(new Date());
     }
 
     if (
@@ -511,10 +527,17 @@ export default function Home() {
     setSubmitting(true);
 
     try {
+      const payloadFields = { ...fieldValues };
+      for (const column of extraFields) {
+        if (isBookedAtField(column)) {
+          payloadFields[column] = formatLocalDate(new Date());
+        }
+      }
+
       const formData = new FormData();
       formData.append("templateId", String(selectedTemplate.id));
       formData.append("file", file);
-      formData.append("fields", JSON.stringify(fieldValues));
+      formData.append("fields", JSON.stringify(payloadFields));
 
       const headers: HeadersInit = {};
       if (accessCode) {
@@ -780,10 +803,20 @@ export default function Home() {
                     ) : (
                       <input
                         type={inputTypeForColumn(column)}
-                        value={fieldValues[column] ?? ""}
-                        onChange={(event) => handleFieldChange(column, event.target.value)}
+                        value={
+                          isBookedAtField(column)
+                            ? bookedAtValue
+                            : (fieldValues[column] ?? "")
+                        }
+                        onChange={(event) => {
+                          if (!isBookedAtField(column)) {
+                            handleFieldChange(column, event.target.value);
+                          }
+                        }}
                         className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
                         required={requiredFields.has(column)}
+                        readOnly={isBookedAtField(column)}
+                        disabled={isBookedAtField(column)}
                       />
                     )}
                   </div>
