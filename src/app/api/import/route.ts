@@ -8,7 +8,10 @@ import { stringify } from "csv-stringify/sync";
 type FieldValues = Record<string, string>;
 
 const EMAIL_ALIASES = new Set(["email", "emailaddress", "emailaddr"]);
-const ISO_DATE_PATTERN = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?:$|[T\s])/;
+const YEAR_FIRST_DATE_PATTERN = /^(\d{4})[./-](\d{1,2})[./-](\d{1,2})(.*)$/;
+const DAY_MONTH_YEAR_PATTERN = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})(.*)$/;
+const DAY_FIRST_HINT = /dd[./-]mm/i;
+const MONTH_FIRST_HINT = /mm[./-]dd/i;
 
 function normalizeKey(value: string) {
   const normalized = value
@@ -21,26 +24,86 @@ function normalizeKey(value: string) {
   return normalized;
 }
 
-function isDateColumn(column: string) {
+function formatOutputHeader(column: string) {
   const normalized = normalizeKey(column);
-  return normalized.includes("date") || normalized.includes("bookedat") || normalized === "dob";
+  if (normalized === "email") {
+    return "#email";
+  }
+  return column;
 }
 
-function formatDateValue(value: string) {
+function normalizeYear(raw: string) {
+  if (raw.length === 2) {
+    const numeric = Number(raw);
+    if (!Number.isNaN(numeric)) {
+      return numeric >= 70 ? `19${raw}` : `20${raw}`;
+    }
+  }
+  return raw;
+}
+
+function isValidDateParts(day: number, month: number) {
+  return Number.isInteger(day) && Number.isInteger(month) && day >= 1 && day <= 31 && month >= 1 && month <= 12;
+}
+
+function formatDateValue(value: string, column: string) {
   const trimmed = value.trim();
-  const match = trimmed.match(ISO_DATE_PATTERN);
-  if (!match) {
+  if (!trimmed) {
     return value;
   }
-  const [, year, month, day] = match;
-  return `${day.padStart(2, "0")}/${month.padStart(2, "0")}/${year}`;
+
+  let match = trimmed.match(YEAR_FIRST_DATE_PATTERN);
+  if (match) {
+    const [, year, month, day, rest] = match;
+    const dayNum = Number(day);
+    const monthNum = Number(month);
+    if (!isValidDateParts(dayNum, monthNum)) {
+      return value;
+    }
+    return `${String(dayNum).padStart(2, "0")}/${String(monthNum).padStart(2, "0")}/${normalizeYear(year)}${rest}`;
+  }
+
+  match = trimmed.match(DAY_MONTH_YEAR_PATTERN);
+  if (match) {
+    const [, part1, part2, yearRaw, rest] = match;
+    const num1 = Number(part1);
+    const num2 = Number(part2);
+    const hasDayFirstHint = DAY_FIRST_HINT.test(column);
+    const hasMonthFirstHint = MONTH_FIRST_HINT.test(column);
+    let day = part1;
+    let month = part2;
+
+    if (hasDayFirstHint && !hasMonthFirstHint) {
+      day = part1;
+      month = part2;
+    } else if (hasMonthFirstHint && !hasDayFirstHint) {
+      day = part2;
+      month = part1;
+    } else if (num1 > 12 && num2 <= 12) {
+      day = part1;
+      month = part2;
+    } else if (num2 > 12 && num1 <= 12) {
+      day = part2;
+      month = part1;
+    } else {
+      day = part2;
+      month = part1;
+    }
+
+    const dayNum = Number(day);
+    const monthNum = Number(month);
+    if (!isValidDateParts(dayNum, monthNum)) {
+      return value;
+    }
+
+    return `${String(dayNum).padStart(2, "0")}/${String(monthNum).padStart(2, "0")}/${normalizeYear(yearRaw)}${rest}`;
+  }
+
+  return value;
 }
 
 function formatOutputValue(column: string, value: string) {
-  if (!isDateColumn(column)) {
-    return value;
-  }
-  return formatDateValue(value);
+  return formatDateValue(value, column);
 }
 
 function isRosterField(key: string) {
@@ -230,7 +293,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const outputColumns = templateColumns;
+    const outputColumns = templateColumns.map((column) => formatOutputHeader(column));
 
     const csvOutput = stringify(outputRows, {
       header: true,
