@@ -8,6 +8,7 @@ import { stringify } from "csv-stringify/sync";
 type FieldValues = Record<string, string>;
 
 const EMAIL_ALIASES = new Set(["email", "emailaddress", "emailaddr"]);
+const ISO_DATE_PATTERN = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?:$|[T\s])/;
 
 function normalizeKey(value: string) {
   const normalized = value
@@ -18,6 +19,28 @@ function normalizeKey(value: string) {
     return "email";
   }
   return normalized;
+}
+
+function isDateColumn(column: string) {
+  const normalized = normalizeKey(column);
+  return normalized.includes("date") || normalized.includes("bookedat") || normalized === "dob";
+}
+
+function formatDateValue(value: string) {
+  const trimmed = value.trim();
+  const match = trimmed.match(ISO_DATE_PATTERN);
+  if (!match) {
+    return value;
+  }
+  const [, year, month, day] = match;
+  return `${day.padStart(2, "0")}/${month.padStart(2, "0")}/${year}`;
+}
+
+function formatOutputValue(column: string, value: string) {
+  if (!isDateColumn(column)) {
+    return value;
+  }
+  return formatDateValue(value);
 }
 
 function isRosterField(key: string) {
@@ -174,21 +197,22 @@ export async function POST(request: Request) {
   let errorMessage: string | undefined;
 
   try {
-    const outputRows = records.map((row) => {
-      return templateColumns.map((column) => {
+    const outputRows = records.map((row) =>
+      templateColumns.map((column) => {
         const normalized = normalizeKey(column);
+        let value = "";
         if (normalized === "firstname") {
-          return String(row[firstHeader] ?? "").trim();
+          value = String(row[firstHeader] ?? "").trim();
+        } else if (normalized === "lastname") {
+          value = String(row[lastHeader] ?? "").trim();
+        } else if (normalized === "email") {
+          value = String(row[emailHeader] ?? "").trim();
+        } else {
+          value = fieldValues[column] ?? "";
         }
-        if (normalized === "lastname") {
-          return String(row[lastHeader] ?? "").trim();
-        }
-        if (normalized === "email") {
-          return String(row[emailHeader] ?? "").trim();
-        }
-        return fieldValues[column] ?? "";
-      });
-    });
+        return formatOutputValue(column, value);
+      }),
+    );
 
     for (const [index, row] of outputRows.entries()) {
       for (const [colIndex, value] of row.entries()) {
@@ -206,13 +230,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const outputColumns = templateColumns.map((column) => {
-      const normalized = normalizeKey(column);
-      if (normalized === "email") {
-        return "Email Address";
-      }
-      return column;
-    });
+    const outputColumns = templateColumns;
 
     const csvOutput = stringify(outputRows, {
       header: true,
