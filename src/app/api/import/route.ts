@@ -24,6 +24,10 @@ function normalizeKey(value: string) {
   return normalized;
 }
 
+function isBookedAtField(column: string) {
+  return normalizeKey(column).includes("bookedat");
+}
+
 function formatOutputHeader(column: string) {
   const normalized = normalizeKey(column);
   if (normalized === "email") {
@@ -52,6 +56,16 @@ function formatDateValue(value: string, column: string) {
     return value;
   }
 
+  const hasDayFirstHint = DAY_FIRST_HINT.test(column);
+  const hasMonthFirstHint = MONTH_FIRST_HINT.test(column);
+  const defaultMonthFirst = isBookedAtField(column);
+  const outputMonthFirst =
+    hasMonthFirstHint && !hasDayFirstHint
+      ? true
+      : hasDayFirstHint && !hasMonthFirstHint
+        ? false
+        : defaultMonthFirst;
+
   let match = trimmed.match(YEAR_FIRST_DATE_PATTERN);
   if (match) {
     const [, year, month, day, rest] = match;
@@ -59,6 +73,9 @@ function formatDateValue(value: string, column: string) {
     const monthNum = Number(month);
     if (!isValidDateParts(dayNum, monthNum)) {
       return value;
+    }
+    if (outputMonthFirst) {
+      return `${String(monthNum).padStart(2, "0")}/${String(dayNum).padStart(2, "0")}/${normalizeYear(year)}${rest}`;
     }
     return `${String(dayNum).padStart(2, "0")}/${String(monthNum).padStart(2, "0")}/${normalizeYear(year)}${rest}`;
   }
@@ -68,8 +85,6 @@ function formatDateValue(value: string, column: string) {
     const [, part1, part2, yearRaw, rest] = match;
     const num1 = Number(part1);
     const num2 = Number(part2);
-    const hasDayFirstHint = DAY_FIRST_HINT.test(column);
-    const hasMonthFirstHint = MONTH_FIRST_HINT.test(column);
     let day = part1;
     let month = part2;
 
@@ -85,6 +100,9 @@ function formatDateValue(value: string, column: string) {
     } else if (num2 > 12 && num1 <= 12) {
       day = part2;
       month = part1;
+    } else if (outputMonthFirst) {
+      day = part2;
+      month = part1;
     } else {
       day = part1;
       month = part2;
@@ -96,6 +114,9 @@ function formatDateValue(value: string, column: string) {
       return value;
     }
 
+    if (outputMonthFirst) {
+      return `${String(monthNum).padStart(2, "0")}/${String(dayNum).padStart(2, "0")}/${normalizeYear(yearRaw)}${rest}`;
+    }
     return `${String(dayNum).padStart(2, "0")}/${String(monthNum).padStart(2, "0")}/${normalizeYear(yearRaw)}${rest}`;
   }
 
