@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   const email = invite.email.toLowerCase();
   if (!isAllowedAdminEmail(email)) {
     return Response.json(
-      { error: `Admin email must be @${ALLOWED_ADMIN_DOMAIN}.` },
+      { error: `Admin email must be @${ALLOWED_ADMIN_DOMAIN}` },
       { status: 400 },
     );
   }
