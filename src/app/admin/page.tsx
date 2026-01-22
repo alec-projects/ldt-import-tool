@@ -19,6 +19,11 @@ export default function AdminPage() {
   const [homepageAccessCode, setHomepageAccessCode] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteSending, setInviteSending] = useState(false);
   const [templateUploadStatus, setTemplateUploadStatus] = useState<string | null>(null);
   const [templateFileName, setTemplateFileName] = useState<string | null>(null);
   const [templateEvent, setTemplateEvent] = useState("");
@@ -170,6 +175,36 @@ export default function AdminPage() {
     fetchSettingsAndTemplates().catch(() => {
       setError("Failed to refresh templates.");
     });
+  }
+
+  async function handleInviteSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setInviteStatus(null);
+    setInviteError(null);
+    setInviteLink(null);
+    setInviteSending(true);
+
+    try {
+      const response = await fetch("/api/admin/invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        inviteUrl?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send invite.");
+      }
+      setInviteStatus("Invite sent.");
+      setInviteEmail("");
+      setInviteLink(data.inviteUrl ?? null);
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : "Failed to send invite.");
+    } finally {
+      setInviteSending(false);
+    }
   }
 
   function startEdit(template: Template) {
@@ -344,6 +379,56 @@ export default function AdminPage() {
             >
               Save settings
             </button>
+          </form>
+        </section>
+
+        <section className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.35)]">
+          <h2 className="text-xl font-semibold text-[color:var(--foreground)]">
+            Invite admin
+          </h2>
+          <p className="mt-2 text-sm text-[color:var(--ink-muted)]">
+            Send an invite so a coworker can set their password and access the admin
+            dashboard.
+          </p>
+          <form onSubmit={handleInviteSubmit} className="mt-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                Admin email
+              </label>
+              <input
+                type="email"
+                required
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+                placeholder="name@example.com"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={inviteSending}
+              className="rounded-full bg-[color:var(--forest)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:translate-y-[-1px] hover:bg-[#14523d] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {inviteSending ? "Sending..." : "Send invite"}
+            </button>
+            {inviteStatus && (
+              <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                {inviteStatus}
+              </div>
+            )}
+            {inviteError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {inviteError}
+              </div>
+            )}
+            {inviteLink && (
+              <div className="rounded-xl border border-black/10 bg-white/70 px-4 py-3 text-xs text-[color:var(--ink-muted)]">
+                Invite link:{" "}
+                <a className="font-semibold text-[color:var(--foreground)] underline" href={inviteLink}>
+                  {inviteLink}
+                </a>
+              </div>
+            )}
           </form>
         </section>
 
