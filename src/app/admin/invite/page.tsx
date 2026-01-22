@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 
 const MIN_PASSWORD_LENGTH = 8;
 
-export default function AdminInvitePage() {
+function InviteForm() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token")?.trim() ?? "";
   const [password, setPassword] = useState("");
@@ -55,63 +55,77 @@ export default function AdminInvitePage() {
   }
 
   return (
+    <>
+      <h1 className="text-2xl font-semibold text-[color:var(--foreground)]">
+        Accept admin invite
+      </h1>
+      <p className="mt-2 text-sm text-[color:var(--ink-muted)]">
+        Set a password to finish creating your admin account.
+      </p>
+      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <div className="space-y-2">
+          <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+            Password
+          </label>
+          <input
+            name="password"
+            type="password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+            Confirm password
+          </label>
+          <input
+            name="confirmPassword"
+            type="password"
+            required
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+          />
+        </div>
+        {status && (
+          <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            {status}{" "}
+            <Link className="font-semibold underline" href="/admin">
+              Go to admin
+            </Link>
+            .
+          </div>
+        )}
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+        <button
+          type="submit"
+          className="w-full rounded-full bg-[color:var(--forest)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:translate-y-[-1px] hover:bg-[#14523d] disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={submitting}
+        >
+          {submitting ? "Saving..." : "Set password"}
+        </button>
+      </form>
+    </>
+  );
+}
+
+function InviteFallback() {
+  return <p className="text-sm text-[color:var(--ink-muted)]">Loading…</p>;
+}
+
+export default function AdminInvitePage() {
+  return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f9eddc_0%,#f7f3ee_48%,#efe6da_100%)] px-6 py-16">
       <div className="mx-auto w-full max-w-md rounded-3xl border border-black/10 bg-white/70 p-6 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.35)]">
-        <h1 className="text-2xl font-semibold text-[color:var(--foreground)]">
-          Accept admin invite
-        </h1>
-        <p className="mt-2 text-sm text-[color:var(--ink-muted)]">
-          Set a password to finish creating your admin account.
-        </p>
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
-              Password
-            </label>
-            <input
-              name="password"
-              type="password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
-              Confirm password
-            </label>
-            <input
-              name="confirmPassword"
-              type="password"
-              required
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
-            />
-          </div>
-          {status && (
-            <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-              {status}{" "}
-              <Link className="font-semibold underline" href="/admin">
-                Go to admin
-              </Link>
-              .
-            </div>
-          )}
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-          <button
-            type="submit"
-            className="w-full rounded-full bg-[color:var(--forest)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:translate-y-[-1px] hover:bg-[#14523d] disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={submitting}
-          >
-            {submitting ? "Saving..." : "Set password"}
-          </button>
-        </form>
+        <Suspense fallback={<InviteFallback />}>
+          <InviteForm />
+        </Suspense>
       </div>
     </div>
   );
