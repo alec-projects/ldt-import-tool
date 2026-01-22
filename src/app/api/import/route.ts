@@ -86,8 +86,8 @@ function formatDateValue(value: string, column: string) {
       day = part2;
       month = part1;
     } else {
-      day = part2;
-      month = part1;
+      day = part1;
+      month = part2;
     }
 
     const dayNum = Number(day);
@@ -167,6 +167,8 @@ export async function POST(request: Request) {
   const templateId = Number(formData.get("templateId"));
   const file = formData.get("file");
   const fieldsRaw = String(formData.get("fields") ?? "{}");
+  const delivery = String(formData.get("delivery") ?? "email").toLowerCase();
+  const wantsDownload = delivery === "download";
 
   if (!templateId || Number.isNaN(templateId)) {
     return Response.json({ error: "Template is required." }, { status: 400 });
@@ -300,22 +302,23 @@ export async function POST(request: Request) {
       columns: outputColumns,
     });
 
-    const recipientEmail =
-      (await getSetting("import_recipient_email")) ?? "";
-    if (!recipientEmail) {
-      throw new Error("Recipient email is not configured.");
-    }
-
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     const outputFileName = `import-${timestamp}.csv`;
-    const recipients = [recipientEmail];
-    await sendImportEmail({
-      to: recipients,
-      subject: `Participant Import (${template.event_name} / ${template.race_name} / ${template.ticket_name})`,
-      text: `Attached is the generated import file for ${template.name}.`,
-      filename: outputFileName,
-      content: Buffer.from(csvOutput),
-    });
+    let recipientEmail: string | undefined;
+    if (!wantsDownload) {
+      recipientEmail = (await getSetting("import_recipient_email")) ?? "";
+      if (!recipientEmail) {
+        throw new Error("Recipient email is not configured.");
+      }
+      const recipients = [recipientEmail];
+      await sendImportEmail({
+        to: recipients,
+        subject: `Participant Import (${template.event_name} / ${template.race_name} / ${template.ticket_name})`,
+        text: `Attached is the generated import file for ${template.name}.`,
+        filename: outputFileName,
+        content: Buffer.from(csvOutput),
+      });
+    }
 
     await createImportLog({
       fileName,
@@ -327,6 +330,16 @@ export async function POST(request: Request) {
       status: "success",
       recipientEmail,
     });
+
+    if (wantsDownload) {
+      return new Response(csvOutput, {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${outputFileName}"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
 
     return Response.json({
       ok: true,

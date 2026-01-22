@@ -129,6 +129,31 @@ function randomAddress() {
   return `${number} ${randomFrom(STREET_NAMES)} ${randomFrom(STREET_SUFFIXES)}`;
 }
 
+function parseDownloadFilename(contentDisposition: string | null) {
+  if (!contentDisposition) return null;
+  const match = /filename="?([^\";]+)"?/i.exec(contentDisposition);
+  return match?.[1] ?? null;
+}
+
+async function readErrorMessage(response: Response) {
+  const text = await response.text();
+  if (!text) {
+    return "Import failed.";
+  }
+  try {
+    const data = JSON.parse(text) as { error?: string };
+    if (data && typeof data === "object" && "error" in data) {
+      const message = data.error;
+      if (typeof message === "string" && message.trim()) {
+        return message;
+      }
+    }
+  } catch {
+    return text;
+  }
+  return text;
+}
+
 function createGeneratedProfile(): GeneratedProfile {
   const firstName = randomFrom(FIRST_NAMES);
   const lastName = randomFrom(LAST_NAMES);
@@ -186,6 +211,7 @@ export default function Home() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitAction, setSubmitAction] = useState<"email" | "download" | null>(null);
 
   const loadTemplates = useCallback(async (code: string) => {
     setAccessState("loading");
@@ -528,8 +554,7 @@ export default function Home() {
     await loadTemplates(trimmed);
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitImport(action: "email" | "download") {
     setError(null);
     setStatus(null);
 
@@ -544,6 +569,7 @@ export default function Home() {
     }
 
     setSubmitting(true);
+    setSubmitAction(action);
 
     try {
       const payloadFields = { ...fieldValues };
@@ -557,6 +583,9 @@ export default function Home() {
       formData.append("templateId", String(selectedTemplate.id));
       formData.append("file", file);
       formData.append("fields", JSON.stringify(payloadFields));
+      if (action === "download") {
+        formData.append("delivery", "download");
+      }
 
       const headers: HeadersInit = {};
       if (accessCode) {
@@ -576,7 +605,32 @@ export default function Home() {
         return;
       }
 
-      const data = await response.json();
+      if (action === "download") {
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+
+        const blob = await response.blob();
+        const filename =
+          parseDownloadFilename(response.headers.get("content-disposition")) ??
+          "import.csv";
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+
+        setStatus("CSV generated. Your download should start shortly.");
+        setFieldValues({});
+        setFile(null);
+        setFileStatus(null);
+        return;
+      }
+
+      const data = (await response.json()) as { error?: string };
       if (!response.ok) {
         throw new Error(data.error || "Import failed.");
       }
@@ -589,7 +643,17 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "Import failed.");
     } finally {
       setSubmitting(false);
+      setSubmitAction(null);
     }
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submitImport("email");
+  }
+
+  async function handleDownload() {
+    await submitImport("download");
   }
 
   if (accessState === "loading") {
@@ -870,13 +934,27 @@ export default function Home() {
             </div>
           )}
 
-          <button
-            type="submit"
-            className="flex items-center justify-center rounded-full bg-[color:var(--forest)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:translate-y-[-1px] hover:bg-[#14523d] disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={submitting}
-          >
-            {submitting ? "Processing..." : "Generate & Email CSV"}
-          </button>
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="submit"
+              className="flex items-center justify-center rounded-full bg-[color:var(--forest)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:translate-y-[-1px] hover:bg-[#14523d] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={submitting}
+            >
+              {submitting && submitAction === "email"
+                ? "Processing..."
+                : "Generate & Email CSV"}
+            </button>
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="flex items-center justify-center rounded-full border border-black/20 bg-white px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--forest)] transition hover:translate-y-[-1px] hover:border-black/30 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={submitting}
+            >
+              {submitting && submitAction === "download"
+                ? "Processing..."
+                : "Download CSV"}
+            </button>
+          </div>
         </form>
         <p className="text-xs text-[color:var(--ink-muted)]">
           Admin? Manage templates and settings at{" "}
