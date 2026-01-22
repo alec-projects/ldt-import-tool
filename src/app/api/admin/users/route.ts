@@ -1,9 +1,8 @@
-import { createAdminInvite, ensureSchema, getAdminByEmail } from "@/lib/db";
-import { sendAdminInviteEmail } from "@/lib/email";
+import { createAdminUser, ensureSchema, getAdminByEmail } from "@/lib/db";
 import { getAdminSession } from "@/lib/session";
-import { randomBytes } from "crypto";
+import bcrypt from "bcryptjs";
 
-const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MIN_PASSWORD_LENGTH = 8;
 const ALLOWED_ADMIN_DOMAIN = "letsdothis.com";
 
 function isValidEmail(value: string) {
@@ -20,8 +19,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { email?: string };
+  const body = (await request.json().catch(() => ({}))) as {
+    email?: string;
+    password?: string;
+  };
   const email = body.email?.trim().toLowerCase() ?? "";
+  const password = body.password ?? "";
+
   if (!email) {
     return Response.json({ error: "Email is required." }, { status: 400 });
   }
@@ -34,6 +38,12 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return Response.json(
+      { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` },
+      { status: 400 },
+    );
+  }
 
   await ensureSchema();
   const existingAdmin = await getAdminByEmail(email);
@@ -41,21 +51,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "That email is already an admin." }, { status: 400 });
   }
 
-  const token = randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
-  await createAdminInvite({ email, token, expiresAt });
+  const passwordHash = await bcrypt.hash(password, 12);
+  await createAdminUser(email, passwordHash);
 
-  const origin = request.headers.get("origin") ?? new URL(request.url).origin;
-  const inviteUrl = new URL(`/admin/invite?token=${token}`, origin).toString();
-
-  await sendAdminInviteEmail({
-    to: email,
-    inviteUrl,
-  });
-
-  return Response.json({
-    ok: true,
-    inviteUrl,
-    expiresAt: expiresAt.toISOString(),
-  });
+  return Response.json({ ok: true });
 }

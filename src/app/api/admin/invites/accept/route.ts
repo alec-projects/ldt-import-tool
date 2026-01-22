@@ -9,6 +9,11 @@ import { getAdminSession } from "@/lib/session";
 import bcrypt from "bcryptjs";
 
 const MIN_PASSWORD_LENGTH = 8;
+const ALLOWED_ADMIN_DOMAIN = "letsdothis.com";
+
+function isAllowedAdminEmail(email: string) {
+  return email.toLowerCase().endsWith(`@${ALLOWED_ADMIN_DOMAIN}`);
+}
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
@@ -43,6 +48,12 @@ export async function POST(request: Request) {
   }
 
   const email = invite.email.toLowerCase();
+  if (!isAllowedAdminEmail(email)) {
+    return Response.json(
+      { error: `Admin email must be @${ALLOWED_ADMIN_DOMAIN}.` },
+      { status: 400 },
+    );
+  }
   const existingAdmin = await getAdminByEmail(email);
   if (existingAdmin) {
     return Response.json({ error: "Admin already exists." }, { status: 400 });

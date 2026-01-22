@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type Template = {
@@ -10,6 +11,8 @@ type Template = {
   ticket_name: string;
 };
 
+const MIN_ADMIN_PASSWORD_LENGTH = 8;
+
 export default function AdminPage() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -19,11 +22,12 @@ export default function AdminPage() {
   const [homepageAccessCode, setHomepageAccessCode] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteStatus, setInviteStatus] = useState<string | null>(null);
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [inviteSending, setInviteSending] = useState(false);
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [newAdminConfirmPassword, setNewAdminConfirmPassword] = useState("");
+  const [createAdminStatus, setCreateAdminStatus] = useState<string | null>(null);
+  const [createAdminError, setCreateAdminError] = useState<string | null>(null);
+  const [creatingAdmin, setCreatingAdmin] = useState(false);
   const [templateUploadStatus, setTemplateUploadStatus] = useState<string | null>(null);
   const [templateFileName, setTemplateFileName] = useState<string | null>(null);
   const [templateEvent, setTemplateEvent] = useState("");
@@ -177,33 +181,46 @@ export default function AdminPage() {
     });
   }
 
-  async function handleInviteSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleCreateAdmin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setInviteStatus(null);
-    setInviteError(null);
-    setInviteLink(null);
-    setInviteSending(true);
+    setCreateAdminStatus(null);
+    setCreateAdminError(null);
 
+    if (newAdminPassword.length < MIN_ADMIN_PASSWORD_LENGTH) {
+      setCreateAdminError(
+        `Password must be at least ${MIN_ADMIN_PASSWORD_LENGTH} characters.`,
+      );
+      return;
+    }
+    if (newAdminPassword !== newAdminConfirmPassword) {
+      setCreateAdminError("Passwords do not match.");
+      return;
+    }
+
+    setCreatingAdmin(true);
     try {
-      const response = await fetch("/api/admin/invites", {
+      const response = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: inviteEmail }),
+        body: JSON.stringify({
+          email: newAdminEmail,
+          password: newAdminPassword,
+        }),
       });
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        inviteUrl?: string;
-      };
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        throw new Error(data.error || "Failed to send invite.");
+        throw new Error(data.error || "Failed to create admin account.");
       }
-      setInviteStatus("Invite sent.");
-      setInviteEmail("");
-      setInviteLink(data.inviteUrl ?? null);
+      setCreateAdminStatus("Admin account created.");
+      setNewAdminEmail("");
+      setNewAdminPassword("");
+      setNewAdminConfirmPassword("");
     } catch (err) {
-      setInviteError(err instanceof Error ? err.message : "Failed to send invite.");
+      setCreateAdminError(
+        err instanceof Error ? err.message : "Failed to create admin account.",
+      );
     } finally {
-      setInviteSending(false);
+      setCreatingAdmin(false);
     }
   }
 
@@ -329,12 +346,12 @@ export default function AdminPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <a
+            <Link
               href="/"
               className="rounded-full border border-black/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
             >
               Back to homepage
-            </a>
+            </Link>
             <button
               onClick={handleLogout}
               className="rounded-full border border-black/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
@@ -384,13 +401,12 @@ export default function AdminPage() {
 
         <section className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.35)]">
           <h2 className="text-xl font-semibold text-[color:var(--foreground)]">
-            Invite admin
+            Create admin account
           </h2>
           <p className="mt-2 text-sm text-[color:var(--ink-muted)]">
-            Send an invite so a coworker can set their password and access the admin
-            dashboard.
+            Admins must use an @letsdothis.com email. Share the credentials securely.
           </p>
-          <form onSubmit={handleInviteSubmit} className="mt-4 space-y-4">
+          <form onSubmit={handleCreateAdmin} className="mt-4 space-y-4">
             <div className="space-y-2">
               <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
                 Admin email
@@ -398,35 +414,51 @@ export default function AdminPage() {
               <input
                 type="email"
                 required
-                value={inviteEmail}
-                onChange={(event) => setInviteEmail(event.target.value)}
+                value={newAdminEmail}
+                onChange={(event) => setNewAdminEmail(event.target.value)}
                 className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
-                placeholder="name@example.com"
+                placeholder="name@letsdothis.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                Temporary password
+              </label>
+              <input
+                type="password"
+                required
+                value={newAdminPassword}
+                onChange={(event) => setNewAdminPassword(event.target.value)}
+                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
+                Confirm password
+              </label>
+              <input
+                type="password"
+                required
+                value={newAdminConfirmPassword}
+                onChange={(event) => setNewAdminConfirmPassword(event.target.value)}
+                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
               />
             </div>
             <button
               type="submit"
-              disabled={inviteSending}
+              disabled={creatingAdmin}
               className="rounded-full bg-[color:var(--forest)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:translate-y-[-1px] hover:bg-[#14523d] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {inviteSending ? "Sending..." : "Send invite"}
+              {creatingAdmin ? "Creating..." : "Create admin"}
             </button>
-            {inviteStatus && (
+            {createAdminStatus && (
               <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-                {inviteStatus}
+                {createAdminStatus}
               </div>
             )}
-            {inviteError && (
+            {createAdminError && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {inviteError}
-              </div>
-            )}
-            {inviteLink && (
-              <div className="rounded-xl border border-black/10 bg-white/70 px-4 py-3 text-xs text-[color:var(--ink-muted)]">
-                Invite link:{" "}
-                <a className="font-semibold text-[color:var(--foreground)] underline" href={inviteLink}>
-                  {inviteLink}
-                </a>
+                {createAdminError}
               </div>
             )}
           </form>
