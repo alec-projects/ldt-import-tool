@@ -28,6 +28,15 @@ function isBookedAtField(column: string) {
   return normalizeKey(column).includes("bookedat");
 }
 
+function isBirthDateField(column: string) {
+  const normalized = normalizeKey(column);
+  return (
+    normalized === "dob" ||
+    normalized.includes("dateofbirth") ||
+    normalized.includes("birthdate")
+  );
+}
+
 function formatOutputHeader(column: string) {
   const normalized = normalizeKey(column);
   if (normalized === "email") {
@@ -59,12 +68,15 @@ function formatDateValue(value: string, column: string) {
   const hasDayFirstHint = DAY_FIRST_HINT.test(column);
   const hasMonthFirstHint = MONTH_FIRST_HINT.test(column);
   const defaultMonthFirst = isBookedAtField(column);
-  const outputMonthFirst =
+  let outputMonthFirst =
     hasMonthFirstHint && !hasDayFirstHint
       ? true
       : hasDayFirstHint && !hasMonthFirstHint
         ? false
         : defaultMonthFirst;
+  if (isBirthDateField(column)) {
+    outputMonthFirst = false;
+  }
 
   let match = trimmed.match(YEAR_FIRST_DATE_PATTERN);
   if (match) {
