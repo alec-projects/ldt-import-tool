@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { mapTemplateColumns, normalizeKey, parseHeaderRow } from "@/lib/import-mapping";
 
 type Template = {
   id: number;
@@ -27,7 +28,6 @@ type TemplateOption = {
 type AccessState = "loading" | "locked" | "unlocked";
 
 const ACCESS_CODE_STORAGE_KEY = "ldt_access_code";
-const EMAIL_ALIASES = new Set(["email", "emailaddress", "emailaddr"]);
 const FIRST_NAMES = [
   "Avery",
   "Jordan",
@@ -176,24 +176,8 @@ function createGeneratedProfile(): GeneratedProfile {
   };
 }
 
-function normalizeKey(value: string) {
-  const normalized = value
-    .replace(/^#+/, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-  if (EMAIL_ALIASES.has(normalized)) {
-    return "email";
-  }
-  return normalized;
-}
-
 function isBookedAtField(column: string) {
   return normalizeKey(column).includes("bookedat");
-}
-
-function isRosterField(column: string) {
-  const normalized = normalizeKey(column);
-  return normalized === "firstname" || normalized === "lastname" || normalized === "email";
 }
 
 export default function Home() {
@@ -206,6 +190,8 @@ export default function Home() {
   const [selectedTicket, setSelectedTicket] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [fileStatus, setFileStatus] = useState<string | null>(null);
+  const [fileHeaders, setFileHeaders] = useState<string[] | null>(null);
+  const [fileHeaderError, setFileHeaderError] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<FieldValues>({});
   const [autoFilledValues, setAutoFilledValues] = useState<FieldValues>({});
   const [status, setStatus] = useState<string | null>(null);
@@ -274,6 +260,39 @@ export default function Home() {
     loadTemplates(storedCode);
   }, [loadTemplates]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadHeaders() {
+      if (!file) {
+        setFileHeaders(null);
+        setFileHeaderError(null);
+        return;
+      }
+
+      try {
+        const chunk = await file.slice(0, 65536).text();
+        if (cancelled) return;
+        const headers = parseHeaderRow(chunk);
+        if (headers.length === 0) {
+          setFileHeaderError("Unable to read CSV headers.");
+          setFileHeaders(null);
+          return;
+        }
+        setFileHeaders(headers);
+        setFileHeaderError(null);
+      } catch {
+        if (cancelled) return;
+        setFileHeaders(null);
+        setFileHeaderError("Unable to read CSV headers.");
+      }
+    }
+
+    loadHeaders();
+    return () => {
+      cancelled = true;
+    };
+  }, [file]);
+
   const events = useMemo(() => {
     return Array.from(new Set(templates.map((template) => template.event)));
   }, [templates]);
@@ -310,18 +329,29 @@ export default function Home() {
     );
   }, [templates, selectedEvent, selectedRace, selectedTicket]);
 
-  const extraFields = useMemo(() => {
-    if (!selectedTemplate) return [];
-    return selectedTemplate.columns.filter((column) => !isRosterField(column));
-  }, [selectedTemplate]);
+  const columnMapping = useMemo(() => {
+    if (!selectedTemplate || !fileHeaders || fileHeaders.length === 0) return null;
+    return mapTemplateColumns(selectedTemplate.columns, fileHeaders);
+  }, [selectedTemplate, fileHeaders]);
 
   const requiredFields = useMemo(() => {
     return new Set(selectedTemplate?.requiredColumns ?? []);
   }, [selectedTemplate]);
 
-  const requiredExtraFields = useMemo(() => {
-    return extraFields.filter((column) => requiredFields.has(column));
-  }, [extraFields, requiredFields]);
+  const missingColumns = useMemo(() => {
+    if (!selectedTemplate || !columnMapping) return [];
+    return selectedTemplate.columns.filter((column) => !columnMapping[column]);
+  }, [selectedTemplate, columnMapping]);
+
+  const requiredMissingColumns = useMemo(() => {
+    return missingColumns.filter((column) => requiredFields.has(column));
+  }, [missingColumns, requiredFields]);
+
+  const missingRequiredDefaults = useMemo(() => {
+    return requiredMissingColumns.filter(
+      (column) => (fieldValues[column]?.trim() ?? "") === "",
+    );
+  }, [requiredMissingColumns, fieldValues]);
   const bookedAtValue = formatLocalDate(new Date());
 
   function inputTypeForColumn(column: string) {
@@ -510,12 +540,12 @@ export default function Home() {
   }
 
   function handleAutoFill() {
-    if (!selectedTemplate || requiredExtraFields.length === 0) return;
+    if (!selectedTemplate || requiredMissingColumns.length === 0) return;
 
     const profile = createGeneratedProfile();
     const next = { ...fieldValues };
     const nextAutoFilled: FieldValues = {};
-    for (const column of requiredExtraFields) {
+    for (const column of requiredMissingColumns) {
       if ((next[column]?.trim() ?? "") !== "") {
         continue;
       }
@@ -568,12 +598,24 @@ export default function Home() {
       return;
     }
 
+    if (missingRequiredDefaults.length > 0) {
+      setError(
+        `Missing required defaults: ${missingRequiredDefaults
+          .map((column) => column.replace(/^#+/, ""))
+          .join(", ")}`,
+      );
+      return;
+    }
+
     setSubmitting(true);
     setSubmitAction(action);
 
     try {
-      const payloadFields = { ...fieldValues };
-      for (const column of extraFields) {
+      const payloadFields: FieldValues = {};
+      for (const column of missingColumns) {
+        if ((fieldValues[column]?.trim() ?? "") !== "") {
+          payloadFields[column] = fieldValues[column];
+        }
         if (isBookedAtField(column)) {
           payloadFields[column] = formatLocalDate(new Date());
         }
@@ -732,9 +774,9 @@ export default function Home() {
             Import a participant roster
           </h1>
           <p className="text-sm text-[color:var(--ink-muted)]">
-            Upload a CSV with First Name, Last Name, and Email. Select the event,
-            race, and ticket, then fill the remaining fields once to generate a
-            validated CSV. Nothing is saved after submission.
+            Upload a startlist CSV, select the event, race, and ticket, then
+            fill any missing template fields once to generate a validated CSV.
+            Nothing is saved after submission.
           </p>
         </header>
 
@@ -761,12 +803,15 @@ export default function Home() {
                 />
               </label>
               <p className="mt-2 text-xs text-[color:var(--ink-muted)]">
-                Required columns: First Name, Last Name, Email Address
+                We&apos;ll auto-match your headers to the template.
               </p>
               {file && (
                 <p className="mt-2 text-sm text-[color:var(--foreground)]">
                   {file.name}
                 </p>
+              )}
+              {fileHeaderError && (
+                <p className="mt-2 text-xs text-red-600">{fileHeaderError}</p>
               )}
               {fileStatus && (
                 <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--forest)]">
@@ -846,11 +891,32 @@ export default function Home() {
               <div className="rounded-2xl border border-black/10 bg-[color:var(--sand)] px-4 py-3 text-sm text-[color:var(--ink-muted)]">
                 Template selected: <span className="font-medium">{selectedTemplate.name}</span>
               </div>
+              {file && columnMapping && (
+                <div className="rounded-2xl border border-black/10 bg-white/70 px-4 py-3 text-sm text-[color:var(--ink-muted)]">
+                  Matched{" "}
+                  <span className="font-semibold text-[color:var(--foreground)]">
+                    {selectedTemplate.columns.length - missingColumns.length}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-semibold text-[color:var(--foreground)]">
+                    {selectedTemplate.columns.length}
+                  </span>{" "}
+                  template fields.
+                  {missingColumns.length > 0 && (
+                    <div className="mt-2 text-xs text-[color:var(--ink-muted)]">
+                      Missing fields will use defaults:{" "}
+                      <span className="font-medium text-[color:var(--foreground)]">
+                        {missingColumns.map((column) => column.replace(/^#+/, "")).join(", ")}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
-                  Only fields marked with * are required.
+                  Only missing fields marked with * are required.
                 </p>
-                {requiredExtraFields.length > 0 && (
+                {requiredMissingColumns.length > 0 && (
                   <button
                     type="button"
                     onClick={handleAutoFill}
@@ -870,7 +936,7 @@ export default function Home() {
                 )}
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                {extraFields.map((column) => (
+                {missingColumns.map((column) => (
                   <div key={column} className="space-y-2">
                     <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-muted)]">
                       {column.replace(/^#+/, "")}

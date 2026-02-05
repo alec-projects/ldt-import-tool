@@ -4,25 +4,13 @@ import { sendImportEmail } from "@/lib/email";
 import { getClientIp, getRateLimitConfig, rateLimit } from "@/lib/rate-limit";
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
+import { mapTemplateColumns, normalizeKey } from "@/lib/import-mapping";
 
 type FieldValues = Record<string, string>;
-
-const EMAIL_ALIASES = new Set(["email", "emailaddress", "emailaddr"]);
 const YEAR_FIRST_DATE_PATTERN = /^(\d{4})[./-](\d{1,2})[./-](\d{1,2})(.*)$/;
 const DAY_MONTH_YEAR_PATTERN = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})(.*)$/;
 const DAY_FIRST_HINT = /dd[./-]mm/i;
 const MONTH_FIRST_HINT = /mm[./-]dd/i;
-
-function normalizeKey(value: string) {
-  const normalized = value
-    .replace(/^#+/, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-  if (EMAIL_ALIASES.has(normalized)) {
-    return "email";
-  }
-  return normalized;
-}
 
 function isBookedAtField(column: string) {
   return normalizeKey(column).includes("bookedat");
@@ -139,25 +127,6 @@ function formatOutputValue(column: string, value: string) {
   return formatDateValue(value, column);
 }
 
-function isRosterField(key: string) {
-  const normalized = normalizeKey(key);
-  return (
-    normalized === "firstname" ||
-    normalized === "lastname" ||
-    normalized === "email"
-  );
-}
-
-function findRosterHeader(headers: string[], type: "firstname" | "lastname" | "email") {
-  for (const key of headers) {
-    const normalized = normalizeKey(key);
-    if (normalized === type) {
-      return key;
-    }
-  }
-  return null;
-}
-
 const importRateLimit = getRateLimitConfig("IMPORT_RATE_LIMIT", {
   windowMs: 60 * 60 * 1000,
   max: 25,
@@ -265,28 +234,20 @@ export async function POST(request: Request) {
   );
 
   const headers = Object.keys(records[0] ?? {});
-  const firstHeader = findRosterHeader(headers, "firstname");
-  const lastHeader = findRosterHeader(headers, "lastname");
-  const emailHeader = findRosterHeader(headers, "email");
-
-  if (!firstHeader || !lastHeader || !emailHeader) {
-    return Response.json(
-      {
-        error:
-          "CSV must include First Name, Last Name, and Email columns (any common header variation is accepted).",
-      },
-      { status: 400 },
-    );
-  }
+  const columnToHeader = mapTemplateColumns(templateColumns, headers);
 
   const missingRequiredFields = templateColumns
     .filter((column) => requiredColumns.has(column))
-    .filter((column) => !isRosterField(column))
+    .filter((column) => !columnToHeader[column])
     .filter((column) => (fieldValues[column]?.trim() ?? "") === "");
 
   if (missingRequiredFields.length > 0) {
     return Response.json(
-      { error: `Missing required fields: ${missingRequiredFields.join(", ")}` },
+      {
+        error:
+          "Missing required fields (not found in upload, and no default provided): " +
+          missingRequiredFields.join(", "),
+      },
       { status: 400 },
     );
   }
@@ -297,14 +258,10 @@ export async function POST(request: Request) {
   try {
     const outputRows = records.map((row) =>
       templateColumns.map((column) => {
-        const normalized = normalizeKey(column);
+        const header = columnToHeader[column];
         let value = "";
-        if (normalized === "firstname") {
-          value = String(row[firstHeader] ?? "").trim();
-        } else if (normalized === "lastname") {
-          value = String(row[lastHeader] ?? "").trim();
-        } else if (normalized === "email") {
-          value = String(row[emailHeader] ?? "").trim();
+        if (header) {
+          value = String(row[header] ?? "").trim();
         } else {
           value = fieldValues[column] ?? "";
         }
@@ -315,11 +272,7 @@ export async function POST(request: Request) {
     for (const [index, row] of outputRows.entries()) {
       for (const [colIndex, value] of row.entries()) {
         const columnName = templateColumns[colIndex];
-        const isRequired =
-          requiredColumns.has(columnName) ||
-          normalizeKey(columnName) === "firstname" ||
-          normalizeKey(columnName) === "lastname" ||
-          normalizeKey(columnName) === "email";
+        const isRequired = requiredColumns.has(columnName);
         if (isRequired && String(value).trim() === "") {
           throw new Error(
             `Row ${index + 1} is missing a required value for ${columnName}.`,
